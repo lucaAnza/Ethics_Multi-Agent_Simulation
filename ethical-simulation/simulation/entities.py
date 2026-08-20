@@ -27,7 +27,9 @@ class Car:
     brake_active: bool = False
 
     def update(self, delta_time: float) -> None:
-        self.x += self.speed * self.direction * delta_time
+        heading_radians = math.radians(self.heading)
+        self.x += math.cos(heading_radians) * self.speed * self.direction * delta_time
+        self.y += math.sin(heading_radians) * self.speed * self.direction * delta_time
 
     def update_driving(
         self,
@@ -56,7 +58,7 @@ class Car:
 
         if abs(self.speed) > 1.0:
             reverse_direction = -1.0 if self.speed < 0 else 1.0
-            self.heading += steering * 105.0 * reverse_direction * delta_time
+            self.heading -= steering * 105.0 * reverse_direction * delta_time
 
         heading_radians = math.radians(self.heading)
         self.x += math.cos(heading_radians) * self.speed * delta_time

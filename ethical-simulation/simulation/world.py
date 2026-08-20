@@ -57,6 +57,15 @@ class World:
             self.cars[0].brake_active = False
             self.cars[0].steering_percent = 0.0
 
+    def all_cars_stopped(self, speed_threshold: float = 0.01) -> bool:
+        """Return true when every car in the world is effectively stationary."""
+        return bool(self.cars) and all(
+            abs(car.speed) <= speed_threshold for car in self.cars
+        )
+
+    def dead_pedestrians(self) -> list[Pedestrian]:
+        return [pedestrian for pedestrian in self.pedestrians if not pedestrian.alive]
+
     def _keep_car_in_world(self, car: Car) -> bool:
         playable_top = self.height - 72 - 24
         bounded_x = min(max(car.x, 40.0), self.width - 40.0)
@@ -128,6 +137,67 @@ class World:
 
         return outcomes
 
+    def build_ethical_decision_state(self, seconds: float = 2.0) -> dict:
+        """Build four comparable alternatives for an ethical framework."""
+        predicted = self.predict_action_outcomes(seconds=seconds)
+        alternatives = [
+            {
+                "action": "continue",
+                "casualties": self._serialize_casualties(
+                    self.predict_current_course_casualties(seconds)
+                ),
+            },
+            {
+                "action": "steer_right",
+                "casualties": self._serialize_casualties(
+                    predicted.get("Maximum right steer", [])
+                ),
+            },
+            {
+                "action": "steer_left",
+                "casualties": self._serialize_casualties(
+                    predicted.get("Maximum left steer", [])
+                ),
+            },
+            {
+                "action": "brake",
+                "casualties": self._serialize_casualties(
+                    predicted.get("Brake only", [])
+                ),
+            },
+        ]
+        return {"horizon_seconds": seconds, "alternatives": alternatives}
+
+    @staticmethod
+    def _serialize_casualties(casualties: list[Pedestrian]) -> list[dict[str, str | None]]:
+        return [
+            {"model": pedestrian.model, "label": pedestrian.label}
+            for pedestrian in casualties
+        ]
+
+    def update_decision_action(self, delta_time: float, action: str) -> bool:
+        """Apply a temporary command selected by an ethical framework."""
+        if not self.cars:
+            return False
+
+        car = self.cars[0]
+        if action == "brake":
+            car.update_driving(
+                delta_time,
+                throttle=False,
+                brake=True,
+                steering=0.0,
+            )
+        else:
+            steering = 1.0 if action == "steer_right" else -1.0
+            car.brake_active = False
+            car.steering_percent = steering * 100.0
+            self._advance_prediction_car(car, delta_time, steering)
+
+        boundary_hit = self._keep_car_in_world(car)
+        self._check_pedestrian_collisions(car)
+        return boundary_hit
+
     def braking_metrics(self, braking_deceleration: float = 260.0) -> tuple[float, float]:
         """Return stopping time and distance for the current car."""
         if not self.cars:
@@ -157,7 +227,7 @@ class World:
         """Advance a cloned car with constant speed and hypothetical steering."""
         if abs(car.speed) > 1.0:
             reverse_direction = -1.0 if car.speed < 0 else 1.0
-            car.heading += steering * 105.0 * reverse_direction * delta_time
+            car.heading -= steering * 105.0 * reverse_direction * delta_time
 
         heading = math.radians(car.heading)
         car.x += math.cos(heading) * car.speed * car.direction * delta_time
