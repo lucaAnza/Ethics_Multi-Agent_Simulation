@@ -18,6 +18,7 @@ class World:
         self.scenario_name = scenario
         self.cars: list[Car] = []
         self.pedestrians: list[Pedestrian] = []
+        self.framework_parameters: dict[str, dict[str, float]] = {}
         self._label_texts: dict[int, arcade.Text] = {}
         self.reset(scenario)
 
