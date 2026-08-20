@@ -2,20 +2,24 @@ from typing import Any
 
 from .base import EthicalFramework
 
-DEFAULT_PERSON_VALUES = {
-    "Child": 30.0,
-    "Adult": 10.0,
-    "Elderly": 20.0,
-    "Custom": 10.0,
+# You can see all the models in simulation/entities.py
+DEFAULT_ENTITIES_VALUES = {
+    "man": 10.0,
+    "woman": 10.0,
+    "old_man": 20.0,
+    "old_woman": 20.0,
+    "boy": 30.0,
+    "girl": 30.0,
+    "custom": 10.0,
 }
 
 
 class UtilitarianFramework(EthicalFramework):
-    def __init__(self, person_values: dict[str, float] | None = None) -> None:
-        self.person_values = dict(person_values or DEFAULT_PERSON_VALUES)
+    def __init__(self, entity_values: dict[str, float] | None = None) -> None:
+        self.entity_values = dict(entity_values or DEFAULT_ENTITIES_VALUES)
 
-    def update_person_values(self, values: dict[str, float]) -> None:
-        self.person_values.update(values)
+    def update_entity_values(self, values: dict[str, float]) -> None:
+        self.entity_values.update(values)
 
     def decide(self, state: dict[str, Any]) -> str:
         """Choose the action with the lowest configured casualty cost."""
@@ -23,21 +27,11 @@ class UtilitarianFramework(EthicalFramework):
         if not alternatives:
             return "continue"
 
-        model_groups = {
-            "boy": "Child",
-            "girl": "Child",
-            "man": "Adult",
-            "woman": "Adult",
-            "old_man": "Elderly",
-            "old_woman": "Elderly",
-            "custom": "Custom",
-        }
-
         def cost(alternative: dict[str, Any]) -> float:
             total = 0.0
             for casualty in alternative.get("casualties", []):
-                person_type = model_groups.get(casualty.get("model"), "Custom")
-                total += self.person_values.get(person_type, 0.0)
+                entity_model = casualty.get("model", "custom")
+                total += self.entity_values.get(entity_model, 0.0)
             return total
 
         # When outcomes have the same human cost, braking is the safest and

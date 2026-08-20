@@ -5,13 +5,37 @@ window, which keeps the simulation independent from these widgets.
 """
 
 from collections.abc import Callable
+import math
 
+import arcade
 import arcade.gui
 
 FRAMEWORK_NAMES = ["Utilitarianism", "Kant", "Constant", "Ross", "Virtue Ethics"]
 
+ENTITY_MODEL_LABELS = {
+    "man": "Man",
+    "woman": "Woman",
+    "old_man": "Old man",
+    "old_woman": "Old woman",
+    "boy": "Boy",
+    "girl": "Girl",
+    "custom": "Custom",
+}
+
 TEXT = (238, 243, 248)
 MUTED = (155, 170, 185)
+
+MEDAL_COLORS = (
+    (212, 175, 55),   # Gold
+    (192, 192, 192),  # Silver
+    (205, 127, 50),   # Bronze
+)
+
+RANKED_ROW_COLORS = (
+    (67, 56, 24, 210),
+    (49, 56, 66, 210),
+    (65, 43, 28, 210),
+)
 
 BUTTON_COLORS = {
     "default": ((51, 65, 85), (65, 81, 104), (38, 50, 68)),
@@ -25,6 +49,39 @@ BUTTON_COLORS = {
     "back": ((37, 99, 235), (59, 130, 246), (29, 78, 216)),
     "selected": ((67, 56, 202), (79, 70, 229), (55, 48, 163)),
 }
+
+
+class RankDot(arcade.gui.UIWidget):
+    """Small geometric medal marker that does not rely on emoji fonts."""
+
+    def __init__(self) -> None:
+        super().__init__(width=18, height=36)
+        self.medal_color: tuple[int, int, int] | None = None
+
+    def set_medal_color(self, color: tuple[int, int, int] | None) -> None:
+        self.medal_color = color
+        self.trigger_render()
+
+    def do_render(self, surface) -> None:
+        if self.medal_color is None:
+            return
+        self.prepare_render(surface)
+        center_x = self.content_width / 2
+        center_y = self.content_height / 2
+        arcade.draw_circle_filled(center_x, center_y, 6, self.medal_color, num_segments=24)
+        arcade.draw_circle_outline(
+            center_x,
+            center_y,
+            6,
+            (240, 244, 248),
+            1,
+            num_segments=24,
+        )
+
+
+def _rank_entity_models(values: dict[str, float]) -> list[str]:
+    """Rank models by descending value, preserving source order for ties."""
+    return sorted(values, key=lambda model: -values[model])
 
 
 def _button_style(variant: str) -> dict:
@@ -85,6 +142,34 @@ def _heading(title: str, subtitle: str, width: int) -> arcade.gui.UIBoxLayout:
     return header
 
 
+def _fixed_label(
+    text: str,
+    *,
+    width: int,
+    height: int = 36,
+    font_size: int = 12,
+    bold: bool = False,
+    text_color=TEXT,
+    anchor_x: str = "left",
+) -> tuple[arcade.gui.UIAnchorLayout, arcade.gui.UILabel]:
+    """Place a label in a fixed-width column so text cannot shift rows."""
+    holder = arcade.gui.UIAnchorLayout(
+        width=width,
+        height=height,
+        size_hint_min=(width, height),
+        size_hint_max=(width, height),
+    )
+    label = arcade.gui.UILabel(
+        text=text,
+        height=height,
+        font_size=font_size,
+        bold=bold,
+        text_color=text_color,
+    )
+    holder.add(label, anchor_x=anchor_x, anchor_y="center")
+    return holder, label
+
+
 def build_menu(
     manager: arcade.gui.UIManager,
     *,
@@ -109,7 +194,7 @@ def build_framework_settings(
     manager: arcade.gui.UIManager,
     *,
     selected: str,
-    utilitarian_values: dict[str, float],
+    utilitarian_entity_values: dict[str, float],
     on_select: Callable[[str], None],
     on_save: Callable,
     on_back: Callable,
@@ -138,33 +223,96 @@ def build_framework_settings(
         editor.add(
             _heading(
                 "UTILITARIANISM",
-                "ASSIGN A NUMERIC VALUE OR MALUS TO EACH PERSON TYPE",
+                "ASSIGN A NUMERIC VALUE OR MALUS TO EACH ENTITY MODEL",
                 490,
             )
         )
         editor.add(arcade.gui.UIWidget(width=490, height=6))
-        for person_type, value in utilitarian_values.items():
-            row = arcade.gui.UIBoxLayout(vertical=False, space_between=16)
-            row.add(
-                arcade.gui.UILabel(
-                    text=person_type,
-                    width=250,
-                    height=36,
-                    font_size=12,
-                    text_color=TEXT,
-                )
+        ranking_layout = arcade.gui.UIBoxLayout(
+            vertical=True,
+            space_between=6,
+            width=400,
+            size_hint_min=(400, 1),
+            size_hint_max=(400, None),
+        )
+        rows: dict[str, arcade.gui.UIBoxLayout] = {}
+        rank_labels: dict[str, arcade.gui.UILabel] = {}
+        medal_dots: dict[str, RankDot] = {}
+
+        for row_index, (entity_model, value) in enumerate(
+            utilitarian_entity_values.items()
+        ):
+            row = arcade.gui.UIBoxLayout(
+                vertical=False,
+                space_between=10,
+                width=400,
+                height=38,
+                size_hint_min=(400, 38),
+                size_hint_max=(400, 38),
+            ).with_background(color=(38, 48, 61, 205))
+            rank_holder, rank_label = _fixed_label(
+                f"{row_index + 1}.",
+                width=28,
+                font_size=10,
+                bold=True,
+                text_color=MUTED,
+                anchor_x="right",
             )
+            rank_labels[entity_model] = rank_label
+            row.add(rank_holder)
+            medal_dots[entity_model] = row.add(RankDot())
+            entity_holder, _entity_label = _fixed_label(
+                ENTITY_MODEL_LABELS.get(entity_model, entity_model),
+                width=174,
+            )
+            row.add(entity_holder)
             input_widget = row.add(
                 arcade.gui.UIInputText(
                     text=f"{value:g}",
                     width=120,
                     height=36,
+                    size_hint_min=(120, 36),
+                    size_hint_max=(120, 36),
                     font_size=12,
                     text_color=TEXT,
                 )
             )
-            inputs[person_type] = input_widget
-            editor.add(row)
+            inputs[entity_model] = input_widget
+            rows[entity_model] = row
+            ranking_layout.add(row)
+
+        def reorder_ranking() -> None:
+            numeric_values: dict[str, float] = {}
+            for entity_model, input_widget in inputs.items():
+                try:
+                    value = float(input_widget.text.strip())
+                    if not math.isfinite(value):
+                        return
+                    numeric_values[entity_model] = value
+                except ValueError:
+                    return
+
+            ordered_models = _rank_entity_models(numeric_values)
+            ranking_layout.clear()
+            for rank, entity_model in enumerate(ordered_models, start=1):
+                rank_labels[entity_model].text = f"{rank}."
+                medal_index = rank - 1
+                medal_dots[entity_model].set_medal_color(
+                    MEDAL_COLORS[medal_index] if medal_index < 3 else None
+                )
+                if medal_index < 3:
+                    rows[entity_model].with_background(
+                        color=RANKED_ROW_COLORS[medal_index]
+                    )
+                else:
+                    rows[entity_model].with_background(color=(38, 48, 61, 205))
+                ranking_layout.add(rows[entity_model])
+
+        for input_widget in inputs.values():
+            input_widget.on_change = lambda _event: reorder_ranking()
+
+        reorder_ranking()
+        editor.add(ranking_layout)
         editor.add(status)
         editor.add(_button("Save Values", on_save, 180, variant="save"))
     else:

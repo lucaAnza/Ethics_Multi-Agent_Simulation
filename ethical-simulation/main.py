@@ -6,7 +6,7 @@ import webbrowser
 import arcade
 import arcade.gui
 
-from ethics.utilitarian import DEFAULT_PERSON_VALUES
+from ethics.utilitarian import DEFAULT_ENTITIES_VALUES
 from ethics.constant import ConstantFramework
 from ethics.kant import KantFramework
 from ethics.ross import RossFramework
@@ -55,7 +55,7 @@ class SimulationWindow(arcade.Window):
 
         self.world = World(self.width, self.height, self.current_scenario)
         self.framework_settings = {
-            "Utilitarianism": dict(DEFAULT_PERSON_VALUES),
+            "Utilitarianism": dict(DEFAULT_ENTITIES_VALUES),
         }
         self.ethical_frameworks = {
             "Utilitarianism": UtilitarianFramework(
@@ -66,7 +66,7 @@ class SimulationWindow(arcade.Window):
             "Ross": RossFramework(),
         }
         self.world.framework_parameters = self.framework_settings
-        self.utilitarian_inputs: dict[str, arcade.gui.UIInputText] = {}
+        self.utilitarian_entity_inputs: dict[str, arcade.gui.UIInputText] = {}
         self.framework_status_label: arcade.gui.UILabel | None = None
         self.scenario_initial_speeds = {
             "Scenario 1": 120.0,
@@ -373,10 +373,13 @@ class SimulationWindow(arcade.Window):
     def _show_framework_editor(self, framework_name: str) -> None:
         self.active_screen = "framework_settings"
         self.manager.clear()
-        self.utilitarian_inputs, self.framework_status_label = build_framework_settings(
+        (
+            self.utilitarian_entity_inputs,
+            self.framework_status_label,
+        ) = build_framework_settings(
             self.manager,
             selected=framework_name,
-            utilitarian_values=self.framework_settings["Utilitarianism"],
+            utilitarian_entity_values=self.framework_settings["Utilitarianism"],
             on_select=self._show_framework_editor,
             on_save=self._save_utilitarian_settings,
             on_back=self._open_menu,
@@ -387,7 +390,7 @@ class SimulationWindow(arcade.Window):
     ) -> None:
         parsed_values: dict[str, float] = {}
         has_error = False
-        for person_type, input_widget in self.utilitarian_inputs.items():
+        for entity_model, input_widget in self.utilitarian_entity_inputs.items():
             try:
                 value = float(input_widget.text.strip())
                 if not math.isfinite(value):
@@ -397,7 +400,7 @@ class SimulationWindow(arcade.Window):
                 has_error = True
             else:
                 input_widget.invalid = False
-                parsed_values[person_type] = value
+                parsed_values[entity_model] = value
 
         if self.framework_status_label is None:
             return
@@ -407,7 +410,7 @@ class SimulationWindow(arcade.Window):
 
         self.framework_settings["Utilitarianism"].update(parsed_values)
         utilitarian = self.ethical_frameworks["Utilitarianism"]
-        utilitarian.update_person_values(parsed_values)
+        utilitarian.update_entity_values(parsed_values)
         self.framework_status_label.text = "Values saved in simulation state."
 
     def _open_scenario_settings(
