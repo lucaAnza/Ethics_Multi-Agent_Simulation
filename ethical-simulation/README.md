@@ -37,7 +37,14 @@ ethical action overrides the normal steering or brake command.
 
 The **Menu** opens framework, scenario, general, and project-info screens.
 Utilitarianism values can be edited and saved from **Framework Settings**;
-the other settings screens are placeholders for future versions.
+**Scenario Settings** lists every scenario and provides an editor for adding,
+removing, and changing cars and pedestrians. **Set Location** opens the selected
+scenario as a clickable map instead of requiring coordinates to be entered by
+hand. New pedestrians start in the center of the window and can remain still,
+move in one of four directions, or move randomly at a configurable speed. Use
+**Save Scenarios** to persist the catalog in `scenarios/scenario_settings.json`;
+the file is validated and loaded automatically at startup. General settings
+remains a placeholder for a future version.
 
 When the two-second collision alert turns red, the active ethical framework
 receives four predicted outcomes: continue, steer right, steer left, and brake.

@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "scenarios": {
+    "Scenario 1": {
+      "cars": [
+        {
+          "x": 130.0,
+          "y_offset": -42.0,
+          "speed": 120.00000000000001,
+          "heading": 0.0
+        }
+      ],
+      "pedestrians": [
+        {
+          "x": 846.0,
+          "y_offset": 139.72000000000003,
+          "model": "man",
+          "label": null,
+          "action": "move_down",
+          "speed": 55.0
+        },
+        {
+          "x": 931.0,
+          "y_offset": -107.27999999999997,
+          "model": "boy",
+          "label": null,
+          "action": "move_up",
+          "speed": 45.0
+        }
+      ]
+    },
+    "Scenario 2": {
+      "cars": [
+        {
+          "x": 130.0,
+          "y_offset": -42.0,
+          "speed": 120.00000000000001,
+          "heading": 0.0
+        }
+      ],
+      "pedestrians": [
+        {
+          "x": 400.0,
+          "y_offset": 46.0,
+          "model": "man",
+          "label": null,
+          "action": "still",
+          "speed": 55.0
+        },
+        {
+          "x": 475.0,
+          "y_offset": 46.0,
+          "model": "woman",
+          "label": null,
+          "action": "still",
+          "speed": 55.0
+        },
+        {
+          "x": 550.0,
+          "y_offset": 46.0,
+          "model": "old_man",
+          "label": null,
+          "action": "still",
+          "speed": 55.0
+        },
+        {
+          "x": 625.0,
+          "y_offset": 46.0,
+          "model": "old_woman",
+          "label": null,
+          "action": "still",
+          "speed": 55.0
+        },
+        {
+          "x": 700.0,
+          "y_offset": 46.0,
+          "model": "boy",
+          "label": null,
+          "action": "still",
+          "speed": 55.0
+        },
+        {
+          "x": 775.0,
+          "y_offset": 46.0,
+          "model": "girl",
+          "label": null,
+          "action": "still",
+          "speed": 55.0
+        },
+        {
+          "x": 760.0,
+          "y_offset": -25.0,
+          "model": "custom",
+          "label": "Alex",
+          "action": "still",
+          "speed": 55.0
+        }
+      ]
+    },
+    "Scenario Free": {
+      "cars": [
+        {
+          "x": 170.0,
+          "y_offset": 0.0,
+          "speed": 0.0,
+          "heading": 0.0
+        }
+      ],
+      "pedestrians": [
+        {
+          "x": 560.0,
+          "y_offset": 35.0,
+          "model": "woman",
+          "label": null,
+          "action": "still",
+          "speed": 55.0
+        },
+        {
+          "x": 760.0,
+          "y_offset": -35.0,
+          "model": "old_man",
+          "label": null,
+          "action": "still",
+          "speed": 55.0
+        },
+        {
+          "x": 930.0,
+          "y_offset": 20.0,
+          "model": "boy",
+          "label": null,
+          "action": "still",
+          "speed": 55.0
+        },
+        {
+          "x": 670.0,
+          "y_offset": 145.0,
+          "model": "custom",
+          "label": "Sam",
+          "action": "still",
+          "speed": 55.0
+        }
+      ]
+    }
+  }
+}

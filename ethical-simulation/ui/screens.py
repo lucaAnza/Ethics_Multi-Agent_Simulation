@@ -22,6 +22,15 @@ ENTITY_MODEL_LABELS = {
     "custom": "Custom",
 }
 
+PEDESTRIAN_ACTION_LABELS = {
+    "still": "Still",
+    "move_right": "Move right",
+    "move_left": "Move left",
+    "move_down": "Move down",
+    "move_up": "Move up",
+    "random_move": "Random move",
+}
+
 TEXT = (238, 243, 248)
 MUTED = (155, 170, 185)
 
@@ -48,6 +57,8 @@ BUTTON_COLORS = {
     # Back buttons always use #2563EB as their normal state.
     "back": ((37, 99, 235), (59, 130, 246), (29, 78, 216)),
     "selected": ((67, 56, 202), (79, 70, 229), (55, 48, 163)),
+    "car": ((30, 88, 145), (37, 111, 181), (26, 70, 116)),
+    "danger": ((153, 27, 27), (185, 28, 28), (127, 29, 29)),
 }
 
 
@@ -101,11 +112,12 @@ def _button(
     width: int = 340,
     *,
     variant: str = "default",
+    height: int = 42,
 ) -> arcade.gui.UIFlatButton:
     button = arcade.gui.UIFlatButton(
         text=text,
         width=width,
-        height=42,
+        height=height,
         style=_button_style(variant),
     )
     button.on_click = handler
@@ -140,6 +152,61 @@ def _heading(title: str, subtitle: str, width: int) -> arcade.gui.UIBoxLayout:
         )
     )
     return header
+
+
+def _section_heading(title: str, subtitle: str, width: int) -> arcade.gui.UIBoxLayout:
+    """Compact centered heading used inside settings cards."""
+    header = arcade.gui.UIBoxLayout(vertical=True, space_between=2)
+    header.add(
+        arcade.gui.UILabel(
+            text=title,
+            width=width,
+            height=28,
+            font_size=17,
+            bold=True,
+            text_color=TEXT,
+            align="center",
+        )
+    )
+    header.add(
+        arcade.gui.UILabel(
+            text=subtitle,
+            width=width,
+            height=18,
+            font_size=8,
+            text_color=MUTED,
+            align="center",
+        )
+    )
+    return header
+
+
+def _section_card(
+    content: arcade.gui.UIBoxLayout,
+    *,
+    width: int,
+    height: int,
+    accent: tuple[int, int, int],
+) -> arcade.gui.UIAnchorLayout:
+    """Wrap a section in a fixed card with a colored top accent."""
+    content.size_hint = (1, 1)
+    card = arcade.gui.UIAnchorLayout(
+        width=width,
+        height=height,
+        size_hint=(0, 0),
+        size_hint_min=(width, height),
+        size_hint_max=(width, height),
+    )
+    card.with_background(color=(25, 34, 45, 245))
+    card.with_border(width=1, color=(61, 76, 94))
+    card.add(content)
+    card.add(
+        arcade.gui.UIWidget(width=width - 2, height=4).with_background(color=accent),
+        anchor_x="center",
+        anchor_y="top",
+        align_y=-1,
+    )
+    return card
 
 
 def _fixed_label(
@@ -355,6 +422,504 @@ def build_placeholder(
     )
     content.add(_button("Back to Menu", on_back, 220, variant="back"))
     _add_centered(manager, content)
+
+
+def build_scenario_settings(
+    manager: arcade.gui.UIManager,
+    *,
+    scenario_names: list[str],
+    selected_scenario: str,
+    scenario_definition: dict[str, list[dict]],
+    selected_entity: tuple[str, int],
+    road_y: float,
+    message: str,
+    on_select_scenario: Callable[[str], None],
+    on_select_entity: Callable[[str, int], None],
+    on_add_car: Callable,
+    on_add_pedestrian: Callable,
+    on_set_location: Callable,
+    on_delete_entity: Callable,
+    on_save: Callable,
+    on_back: Callable,
+) -> tuple[
+    dict[str, arcade.gui.UIInputText],
+    arcade.gui.UIDropdown | None,
+    arcade.gui.UIDropdown | None,
+    arcade.gui.UISlider | None,
+    arcade.gui.UILabel,
+]:
+    """Build the persistent scenario and entity editor."""
+    card_height = 490
+    scenario_column = arcade.gui.UIBoxLayout(
+        vertical=True,
+        space_between=7,
+        width=206,
+        height=card_height,
+    )
+    scenario_column.add(arcade.gui.UIWidget(width=190, height=10))
+    scenario_column.add(_section_heading("SCENARIOS", "SELECT A SCENARIO", 190))
+    for scenario_name in scenario_names:
+        selected = scenario_name == selected_scenario
+        scenario_button = _button(
+            f"*  {scenario_name}" if selected else scenario_name,
+            lambda _event: None,
+            190,
+            variant="selected" if selected else "default",
+            height=36,
+        )
+        scenario_button.on_click = (
+            lambda _event, name=scenario_name: on_select_scenario(name)
+        )
+        scenario_column.add(scenario_button)
+    scenario_column.add(
+        arcade.gui.UIWidget(
+            width=190,
+            height=18,
+            size_hint=(0, 1),
+            size_hint_min=(190, 18),
+        )
+    )
+    scenario_column.add(_button("Back to Menu", on_back, 190, variant="back"))
+    scenario_column.add(arcade.gui.UIWidget(width=190, height=10))
+
+    cars = scenario_definition["cars"]
+    pedestrians = scenario_definition["pedestrians"]
+    entity_column = arcade.gui.UIBoxLayout(
+        vertical=True,
+        space_between=6,
+        width=306,
+        height=card_height,
+    )
+    entity_column.add(arcade.gui.UIWidget(width=290, height=10))
+    entity_column.add(
+        _section_heading(
+            "ENTITIES",
+            f"{len(cars)} CAR(S)  /  {len(pedestrians)} PEDESTRIAN(S)",
+            290,
+        )
+    )
+    add_row = arcade.gui.UIBoxLayout(vertical=False, space_between=6)
+    add_row.add(_button("+ Car", on_add_car, 142, variant="car", height=36))
+    add_row.add(
+        _button(
+            "+ Pedestrian",
+            on_add_pedestrian,
+            142,
+            variant="scenario",
+            height=36,
+        )
+    )
+    entity_column.add(add_row)
+
+    entity_references = [
+        *(("cars", index) for index in range(len(cars))),
+        *(("pedestrians", index) for index in range(len(pedestrians))),
+    ]
+    page_size = 8
+    try:
+        selected_position = entity_references.index(selected_entity)
+    except ValueError:
+        selected_position = 0
+    page_start = (selected_position // page_size) * page_size
+    page_entities = entity_references[page_start : page_start + page_size]
+
+    for entity_kind, entity_index in page_entities:
+        is_selected = (entity_kind, entity_index) == selected_entity
+        if entity_kind == "cars":
+            text = f"CAR {entity_index + 1}"
+            variant = "selected" if is_selected else "car"
+        else:
+            entity = pedestrians[entity_index]
+            suffix = f" - {entity['label']}" if entity.get("label") else ""
+            text = f"PERSON {entity_index + 1} ({entity['model']}){suffix}"
+            variant = "selected" if is_selected else "scenario"
+        entity_button = _button(
+            f"*  {text}" if is_selected else text,
+            lambda _event: None,
+            290,
+            variant=variant,
+            height=34,
+        )
+        entity_button.on_click = (
+            lambda _event, kind=entity_kind, index=entity_index: on_select_entity(
+                kind, index
+            )
+        )
+        entity_column.add(entity_button)
+
+    if len(entity_references) > page_size:
+        page_row = arcade.gui.UIBoxLayout(vertical=False, space_between=6)
+        previous_position = max(0, page_start - page_size)
+        next_position = min(
+            len(entity_references) - 1,
+            page_start + page_size,
+        )
+        previous_button = _button(
+            "<",
+            lambda _event: on_select_entity(*entity_references[previous_position]),
+            48,
+            height=30,
+        )
+        previous_button.disabled = page_start == 0
+        page_row.add(previous_button)
+        page_row.add(
+            arcade.gui.UILabel(
+                text=(
+                    f"{page_start + 1}-"
+                    f"{min(page_start + page_size, len(entity_references))} "
+                    f"of {len(entity_references)}"
+                ),
+                width=182,
+                height=30,
+                font_size=9,
+                text_color=MUTED,
+                align="center",
+            )
+        )
+        next_button = _button(
+            ">",
+            lambda _event: on_select_entity(*entity_references[next_position]),
+            48,
+            height=30,
+        )
+        next_button.disabled = page_start + page_size >= len(entity_references)
+        page_row.add(next_button)
+        entity_column.add(page_row)
+    entity_column.add(
+        arcade.gui.UIWidget(
+            width=290,
+            height=8,
+            size_hint=(0, 1),
+            size_hint_min=(290, 8),
+        )
+    )
+
+    entity_kind, entity_index = selected_entity
+    entity = scenario_definition[entity_kind][entity_index]
+    input_widgets: dict[str, arcade.gui.UIInputText] = {}
+    model_dropdown: arcade.gui.UIDropdown | None = None
+    action_dropdown: arcade.gui.UIDropdown | None = None
+    pedestrian_speed_slider: arcade.gui.UISlider | None = None
+    editor_column = arcade.gui.UIBoxLayout(
+        vertical=True,
+        space_between=6,
+        width=366,
+        height=card_height,
+    )
+    editor_column.add(arcade.gui.UIWidget(width=350, height=10))
+    entity_title = (
+        f"CAR {entity_index + 1}"
+        if entity_kind == "cars"
+        else f"PEDESTRIAN {entity_index + 1}"
+    )
+    editor_column.add(_section_heading("ENTITY EDITOR", entity_title, 350))
+    editor_column.add(
+        _button(
+            "Set Location",
+            on_set_location,
+            350,
+            variant="link",
+            height=36,
+        )
+    )
+    position_row = arcade.gui.UIBoxLayout(
+        vertical=False,
+        space_between=10,
+        width=350,
+        height=30,
+        size_hint_min=(350, 30),
+        size_hint_max=(350, 30),
+    )
+    x_holder, _x_label = _fixed_label(
+        f"Position X   {entity['x']:g}",
+        width=170,
+        height=30,
+        font_size=10,
+        text_color=MUTED,
+    )
+    x_holder.with_background(color=(31, 43, 56, 230)).with_border(
+        width=1,
+        color=(55, 72, 89),
+    )
+    y_holder, _y_label = _fixed_label(
+        f"Position Y   {entity['y_offset'] + road_y:g}",
+        width=170,
+        height=30,
+        font_size=10,
+        text_color=MUTED,
+    )
+    y_holder.with_background(color=(31, 43, 56, 230)).with_border(
+        width=1,
+        color=(55, 72, 89),
+    )
+    position_row.add(x_holder)
+    position_row.add(y_holder)
+    editor_column.add(position_row)
+
+    def add_input(label: str, key: str, value: str) -> None:
+        row = arcade.gui.UIBoxLayout(
+            vertical=False,
+            space_between=10,
+            width=350,
+            height=36,
+            size_hint_min=(350, 36),
+            size_hint_max=(350, 36),
+        )
+        label_holder, _label = _fixed_label(
+            label,
+            width=120,
+            height=36,
+            font_size=10,
+            text_color=MUTED,
+        )
+        row.add(label_holder)
+        input_widgets[key] = row.add(
+            arcade.gui.UIInputText(
+                text=value,
+                width=220,
+                height=36,
+                size_hint_min=(220, 36),
+                size_hint_max=(220, 36),
+                font_size=11,
+                text_color=TEXT,
+            )
+        )
+        editor_column.add(row)
+
+    if entity_kind == "cars":
+        add_input("Speed (km/h)", "speed_kmh", f"{entity['speed'] * 0.18:g}")
+        add_input("Heading (deg)", "heading", f"{entity['heading']:g}")
+    else:
+        model_row = arcade.gui.UIBoxLayout(
+            vertical=False,
+            space_between=10,
+            width=350,
+            height=36,
+            size_hint_min=(350, 36),
+            size_hint_max=(350, 36),
+        )
+        model_holder, _model_label = _fixed_label(
+            "Person model",
+            width=120,
+            height=36,
+            font_size=10,
+            text_color=MUTED,
+        )
+        model_row.add(model_holder)
+        selected_model_label = ENTITY_MODEL_LABELS.get(entity["model"], entity["model"])
+        model_dropdown = model_row.add(
+            arcade.gui.UIDropdown(
+                default=selected_model_label,
+                options=list(ENTITY_MODEL_LABELS.values()),
+                width=220,
+                height=36,
+            )
+        )
+        editor_column.add(model_row)
+        add_input("Small label", "label", entity.get("label") or "")
+        action_row = arcade.gui.UIBoxLayout(
+            vertical=False,
+            space_between=10,
+            width=350,
+            height=36,
+            size_hint_min=(350, 36),
+            size_hint_max=(350, 36),
+        )
+        action_holder, _action_label = _fixed_label(
+            "Action",
+            width=120,
+            height=36,
+            font_size=10,
+            text_color=MUTED,
+        )
+        action_row.add(action_holder)
+        selected_action_label = PEDESTRIAN_ACTION_LABELS.get(
+            entity.get("action", "still"),
+            "Still",
+        )
+        action_dropdown = action_row.add(
+            arcade.gui.UIDropdown(
+                default=selected_action_label,
+                options=list(PEDESTRIAN_ACTION_LABELS.values()),
+                width=220,
+                height=36,
+            )
+        )
+        editor_column.add(action_row)
+
+        speed_row = arcade.gui.UIBoxLayout(
+            vertical=False,
+            space_between=10,
+            width=350,
+            height=36,
+            size_hint_min=(350, 36),
+            size_hint_max=(350, 36),
+        )
+        speed_title_holder, _speed_title = _fixed_label(
+            "Walking speed",
+            width=100,
+            height=36,
+            font_size=10,
+            text_color=MUTED,
+        )
+        speed_row.add(speed_title_holder)
+        speed_value_holder, speed_value_label = _fixed_label(
+            f"{entity.get('speed', 55.0):03.0f}",
+            width=42,
+            height=36,
+            font_size=10,
+            bold=True,
+            anchor_x="right",
+        )
+        speed_row.add(speed_value_holder)
+        pedestrian_speed_slider = speed_row.add(
+            arcade.gui.UISlider(
+                value=float(entity.get("speed", 55.0)),
+                min_value=0.0,
+                max_value=150.0,
+                step=5.0,
+                width=188,
+                height=26,
+            )
+        )
+
+        def update_speed_label(event: arcade.gui.UIOnChangeEvent) -> None:
+            if event.new_value is not None:
+                speed_value_label.text = f"{float(event.new_value):03.0f}"
+
+        def update_speed_availability(event: arcade.gui.UIOnChangeEvent) -> None:
+            pedestrian_speed_slider.disabled = event.new_value == "Still"
+
+        pedestrian_speed_slider.on_change = update_speed_label
+        action_dropdown.on_change = update_speed_availability
+        pedestrian_speed_slider.disabled = selected_action_label == "Still"
+        editor_column.add(speed_row)
+
+    editor_column.add(
+        arcade.gui.UILabel(
+            text="Choose Set Location and click a point on the map.",
+            width=350,
+            height=20,
+            font_size=8,
+            text_color=MUTED,
+            align="center",
+        )
+    )
+    editor_column.add(
+        arcade.gui.UIWidget(
+            width=350,
+            height=4,
+            size_hint=(0, 1),
+            size_hint_min=(350, 4),
+        )
+    )
+    editor_column.add(
+        _button(
+            "Delete Entity",
+            on_delete_entity,
+            350,
+            variant="danger",
+            height=36,
+        )
+    )
+    editor_column.add(_button("Save Scenarios", on_save, 350, variant="save", height=40))
+    status = editor_column.add(
+        arcade.gui.UILabel(
+            text=message,
+            width=350,
+            height=28,
+            font_size=9,
+            text_color=MUTED,
+            multiline=True,
+            align="center",
+        )
+    )
+    editor_column.add(arcade.gui.UIWidget(width=350, height=6))
+
+    body = arcade.gui.UIBoxLayout(vertical=False, space_between=10)
+    body.add(
+        _section_card(
+            scenario_column,
+            width=206,
+            height=card_height,
+            accent=(37, 99, 235),
+        )
+    )
+    body.add(
+        _section_card(
+            entity_column,
+            width=306,
+            height=card_height,
+            accent=(13, 148, 136),
+        )
+    )
+    body.add(
+        _section_card(
+            editor_column,
+            width=366,
+            height=card_height,
+            accent=(109, 40, 217),
+        )
+    )
+    content = arcade.gui.UIBoxLayout(vertical=True, space_between=12)
+    content.add(
+        _heading(
+            "SCENARIO SETTINGS",
+            "EDIT CARS AND PEDESTRIANS, THEN SAVE THE CATALOG",
+            898,
+        )
+    )
+    content.add(body)
+    _add_centered(manager, content)
+    return (
+        input_widgets,
+        model_dropdown,
+        action_dropdown,
+        pedestrian_speed_slider,
+        status,
+    )
+
+
+def build_location_picker(
+    manager: arcade.gui.UIManager,
+    *,
+    entity_description: str,
+    on_cancel: Callable,
+) -> None:
+    """Build the compact overlay shown above the clickable scenario map."""
+    labels = arcade.gui.UIBoxLayout(vertical=True, space_between=2)
+    labels.add(
+        arcade.gui.UILabel(
+            text=f"SET LOCATION · {entity_description}",
+            width=570,
+            height=24,
+            font_size=13,
+            bold=True,
+            text_color=TEXT,
+        )
+    )
+    labels.add(
+        arcade.gui.UILabel(
+            text="Click anywhere on the map to place the entity.",
+            width=570,
+            height=18,
+            font_size=9,
+            text_color=MUTED,
+        )
+    )
+    bar = arcade.gui.UIBoxLayout(
+        vertical=False,
+        space_between=18,
+        width=800,
+        height=58,
+        size_hint_min=(800, 58),
+        size_hint_max=(800, 58),
+    ).with_background(color=(24, 32, 42, 245))
+    bar.add(labels)
+    bar.add(_button("Cancel", on_cancel, 150, variant="back", height=38))
+    anchor = arcade.gui.UIAnchorLayout()
+    anchor.add(bar, anchor_x="center", anchor_y="top", align_y=-10)
+    manager.add(anchor)
 
 
 def build_info(

@@ -1,5 +1,6 @@
 """Interactive entry point for Ethical Multi-Agent Simulation."""
 
+from copy import deepcopy
 import math
 import webbrowser
 
@@ -11,13 +12,18 @@ from ethics.constant import ConstantFramework
 from ethics.kant import KantFramework
 from ethics.ross import RossFramework
 from ethics.utilitarian import UtilitarianFramework
+from scenarios import load_scenario_definitions, save_scenario_definitions
 from simulation import World
 from simulation.entities import Pedestrian
 from ui.screens import (
+    ENTITY_MODEL_LABELS,
+    PEDESTRIAN_ACTION_LABELS,
     build_framework_settings,
     build_info,
+    build_location_picker,
     build_menu,
     build_placeholder,
+    build_scenario_settings,
 )
 
 SCREEN_WIDTH = 1200
@@ -25,7 +31,6 @@ SCREEN_HEIGHT = 800
 TOOLBAR_HEIGHT = 72
 
 FRAMEWORKS = ["Utilitarianism", "Kant", "Constant", "Ross", "Virtue Ethics"]
-SCENARIOS = ["Scenario 1", "Scenario 2", "Scenario Free"]
 GITHUB_REPOSITORY = "https://github.com/lucaAnza/Ethics_Multi-Agent_Simulation"
 
 
@@ -39,7 +44,13 @@ class SimulationWindow(arcade.Window):
         )
         self.set_minimum_size(1150, 500)
         self.current_framework = "Utilitarianism"
-        self.current_scenario = "Scenario 1"
+        self.scenario_definitions = load_scenario_definitions()
+        self.scenario_names = list(self.scenario_definitions)
+        self.current_scenario = (
+            "Scenario 1"
+            if "Scenario 1" in self.scenario_definitions
+            else self.scenario_names[0]
+        )
         self.active_screen = "simulation"
         self.is_running = False
         self.time_scale = 1.0
@@ -53,7 +64,12 @@ class SimulationWindow(arcade.Window):
         self._last_alert_prediction: tuple[int, ...] | None = None
         self._last_decision_alert: tuple[int, ...] | None = None
 
-        self.world = World(self.width, self.height, self.current_scenario)
+        self.world = World(
+            self.width,
+            self.height,
+            self.current_scenario,
+            self.scenario_definitions,
+        )
         self.framework_settings = {
             "Utilitarianism": dict(DEFAULT_ENTITIES_VALUES),
         }
@@ -69,10 +85,30 @@ class SimulationWindow(arcade.Window):
         self.utilitarian_entity_inputs: dict[str, arcade.gui.UIInputText] = {}
         self.framework_status_label: arcade.gui.UILabel | None = None
         self.scenario_initial_speeds = {
-            "Scenario 1": 120.0,
-            "Scenario 2": 120.0,
-            "Scenario Free": 0.0,
+            name: float(definition["cars"][0]["speed"])
+            for name, definition in self.scenario_definitions.items()
         }
+        self.scenario_editor_draft = deepcopy(self.scenario_definitions)
+        self.scenario_editor_scenario = self.current_scenario
+        self.scenario_editor_entity = ("cars", 0)
+        self.scenario_editor_inputs: dict[str, arcade.gui.UIInputText] = {}
+        self.scenario_editor_model: arcade.gui.UIDropdown | None = None
+        self.scenario_editor_action: arcade.gui.UIDropdown | None = None
+        self.scenario_editor_pedestrian_speed: arcade.gui.UISlider | None = None
+        self.scenario_editor_status: arcade.gui.UILabel | None = None
+        self.scenario_editor_message = ""
+        self.scenario_location_preview: World | None = None
+        self.scenario_location_cursor = (self.width / 2, self.height / 2)
+        self.scenario_location_text = arcade.Text(
+            "You are moving this entity",
+            0,
+            0,
+            (190, 145, 25),
+            11,
+            anchor_x="center",
+            anchor_y="bottom",
+            bold=True,
+        )
         self._hud_texts = self._create_hud_texts()
         self._prediction_texts = self._create_prediction_texts()
         self._end_texts = self._create_end_texts()
@@ -123,7 +159,10 @@ class SimulationWindow(arcade.Window):
         )
         scenario = selection_controls.add(
             arcade.gui.UIDropdown(
-                default=self.current_scenario, options=SCENARIOS, width=110, height=34
+                default=self.current_scenario,
+                options=self.scenario_names,
+                width=110,
+                height=34,
             )
         )
         row.add(section("FRAMEWORK / SIMULATION", selection_controls, 250))
@@ -416,13 +455,272 @@ class SimulationWindow(arcade.Window):
     def _open_scenario_settings(
         self, _event: arcade.gui.UIOnClickEvent | None = None
     ) -> None:
+        self.scenario_editor_draft = deepcopy(self.scenario_definitions)
+        self.scenario_editor_scenario = self.current_scenario
+        self.scenario_editor_entity = ("cars", 0)
+        self.scenario_editor_message = ""
+        self._show_scenario_editor()
+
+    def _show_scenario_editor(self) -> None:
         self.active_screen = "scenario_settings"
         self.manager.clear()
-        build_placeholder(
+        definition = self.scenario_editor_draft[self.scenario_editor_scenario]
+        entity_kind, entity_index = self.scenario_editor_entity
+        if (
+            entity_kind not in {"cars", "pedestrians"}
+            or entity_index >= len(definition[entity_kind])
+        ):
+            self.scenario_editor_entity = ("cars", 0)
+        (
+            self.scenario_editor_inputs,
+            self.scenario_editor_model,
+            self.scenario_editor_action,
+            self.scenario_editor_pedestrian_speed,
+            self.scenario_editor_status,
+        ) = build_scenario_settings(
             self.manager,
-            title="Scenario Settings",
+            scenario_names=list(self.scenario_editor_draft),
+            selected_scenario=self.scenario_editor_scenario,
+            scenario_definition=definition,
+            selected_entity=self.scenario_editor_entity,
+            road_y=self.world.road_y,
+            message=self.scenario_editor_message,
+            on_select_scenario=self._select_scenario_to_edit,
+            on_select_entity=self._select_scenario_entity,
+            on_add_car=self._add_scenario_car,
+            on_add_pedestrian=self._add_scenario_pedestrian,
+            on_set_location=self._open_scenario_location_picker,
+            on_delete_entity=self._delete_scenario_entity,
+            on_save=self._save_scenario_settings,
             on_back=self._open_menu,
         )
+
+    def _set_scenario_editor_error(self, message: str) -> None:
+        self.scenario_editor_message = message
+        if self.scenario_editor_status is not None:
+            self.scenario_editor_status.text = message
+            self.scenario_editor_status.update_font(font_color=(248, 113, 113))
+
+    def _commit_scenario_entity_form(self) -> bool:
+        """Copy the visible form into the in-memory editor draft."""
+        entity_kind, entity_index = self.scenario_editor_entity
+        entity = self.scenario_editor_draft[self.scenario_editor_scenario][entity_kind][
+            entity_index
+        ]
+        original_entity = dict(entity)
+
+        def number(key: str, label: str, *, minimum: float | None = None) -> float | None:
+            widget = self.scenario_editor_inputs[key]
+            try:
+                value = float(widget.text.strip())
+                if not math.isfinite(value) or (
+                    minimum is not None and value < minimum
+                ):
+                    raise ValueError
+            except ValueError:
+                widget.invalid = True
+                self._set_scenario_editor_error(f"Enter a valid value for {label}.")
+                return None
+            widget.invalid = False
+            return value
+
+        if entity_kind == "cars":
+            speed_kmh = number("speed_kmh", "Speed", minimum=0.0)
+            heading = number("heading", "Heading")
+            if speed_kmh is None or heading is None:
+                return False
+            entity.update(
+                {
+                    "speed": speed_kmh / 0.18,
+                    "heading": heading,
+                }
+            )
+        else:
+            selected_label = (
+                self.scenario_editor_model.value
+                if self.scenario_editor_model is not None
+                else "Man"
+            )
+            model = next(
+                (
+                    key
+                    for key, display_name in ENTITY_MODEL_LABELS.items()
+                    if display_name == selected_label
+                ),
+                "man",
+            )
+            label = self.scenario_editor_inputs["label"].text.strip()
+            selected_action_label = (
+                self.scenario_editor_action.value
+                if self.scenario_editor_action is not None
+                else "Still"
+            )
+            action = next(
+                (
+                    key
+                    for key, display_name in PEDESTRIAN_ACTION_LABELS.items()
+                    if display_name == selected_action_label
+                ),
+                "still",
+            )
+            pedestrian_speed = (
+                float(self.scenario_editor_pedestrian_speed.value)
+                if self.scenario_editor_pedestrian_speed is not None
+                else 55.0
+            )
+            entity.update(
+                {
+                    "model": model,
+                    "label": label or None,
+                    "action": action,
+                    "speed": pedestrian_speed,
+                }
+            )
+        if entity != original_entity:
+            self.scenario_editor_message = "Unsaved changes."
+        return True
+
+    def _select_scenario_to_edit(self, scenario_name: str) -> None:
+        if not self._commit_scenario_entity_form():
+            return
+        self.scenario_editor_scenario = scenario_name
+        self.scenario_editor_entity = ("cars", 0)
+        self._show_scenario_editor()
+
+    def _select_scenario_entity(self, entity_kind: str, entity_index: int) -> None:
+        if not self._commit_scenario_entity_form():
+            return
+        self.scenario_editor_entity = (entity_kind, entity_index)
+        self._show_scenario_editor()
+
+    def _add_scenario_car(
+        self, _event: arcade.gui.UIOnClickEvent | None = None
+    ) -> None:
+        if not self._commit_scenario_entity_form():
+            return
+        cars = self.scenario_editor_draft[self.scenario_editor_scenario]["cars"]
+        cars.append(
+            {
+                "x": 130.0 + 110.0 * len(cars),
+                "y_offset": -42.0,
+                "speed": 120.0,
+                "heading": 0.0,
+            }
+        )
+        self.scenario_editor_entity = ("cars", len(cars) - 1)
+        self.scenario_editor_message = "Car added. Save to make it persistent."
+        self._show_scenario_editor()
+
+    def _add_scenario_pedestrian(
+        self, _event: arcade.gui.UIOnClickEvent | None = None
+    ) -> None:
+        if not self._commit_scenario_entity_form():
+            return
+        pedestrians = self.scenario_editor_draft[self.scenario_editor_scenario][
+            "pedestrians"
+        ]
+        pedestrians.append(
+            {
+                "x": self.width / 2,
+                "y_offset": self.height / 2 - self.world.road_y,
+                "model": "man",
+                "label": None,
+                "action": "still",
+                "speed": 55.0,
+            }
+        )
+        self.scenario_editor_entity = ("pedestrians", len(pedestrians) - 1)
+        self.scenario_editor_message = "Pedestrian added. Save to make it persistent."
+        self._show_scenario_editor()
+
+    def _open_scenario_location_picker(
+        self, _event: arcade.gui.UIOnClickEvent | None = None
+    ) -> None:
+        if not self._commit_scenario_entity_form():
+            return
+        entity_kind, entity_index = self.scenario_editor_entity
+        entity_name = (
+            f"Car {entity_index + 1}"
+            if entity_kind == "cars"
+            else f"Pedestrian {entity_index + 1}"
+        )
+        self.active_screen = "scenario_location_picker"
+        self.scenario_location_preview = World(
+            self.width,
+            self.height,
+            self.scenario_editor_scenario,
+            self.scenario_editor_draft,
+        )
+        entity = self.scenario_editor_draft[self.scenario_editor_scenario][entity_kind][
+            entity_index
+        ]
+        self.scenario_location_cursor = (
+            float(entity["x"]),
+            self.world.road_y + float(entity["y_offset"]),
+        )
+        self.manager.clear()
+        build_location_picker(
+            self.manager,
+            entity_description=entity_name,
+            on_cancel=self._cancel_scenario_location_picker,
+        )
+
+    def _cancel_scenario_location_picker(
+        self, _event: arcade.gui.UIOnClickEvent | None = None
+    ) -> None:
+        self.scenario_location_preview = None
+        self._show_scenario_editor()
+
+    def _delete_scenario_entity(
+        self, _event: arcade.gui.UIOnClickEvent | None = None
+    ) -> None:
+        entity_kind, entity_index = self.scenario_editor_entity
+        entities = self.scenario_editor_draft[self.scenario_editor_scenario][entity_kind]
+        if entity_kind == "cars" and len(entities) == 1:
+            self._set_scenario_editor_error("A scenario must contain at least one car.")
+            return
+        entities.pop(entity_index)
+        if entities:
+            self.scenario_editor_entity = (
+                entity_kind,
+                min(entity_index, len(entities) - 1),
+            )
+        else:
+            self.scenario_editor_entity = ("cars", 0)
+        self.scenario_editor_message = "Entity removed. Save to make it persistent."
+        self._show_scenario_editor()
+
+    def _save_scenario_settings(
+        self, _event: arcade.gui.UIOnClickEvent | None = None
+    ) -> None:
+        if not self._commit_scenario_entity_form():
+            return
+        try:
+            saved_definitions = save_scenario_definitions(
+                self.scenario_editor_draft
+            )
+        except (OSError, ValueError) as error:
+            self._set_scenario_editor_error(f"Could not save scenarios: {error}")
+            return
+
+        self.scenario_definitions = saved_definitions
+        self.scenario_editor_draft = deepcopy(saved_definitions)
+        self.scenario_names = list(saved_definitions)
+        self.scenario_initial_speeds = {
+            name: float(definition["cars"][0]["speed"])
+            for name, definition in saved_definitions.items()
+        }
+        self.world.set_scenario_definitions(saved_definitions)
+        self.world.reset(self.current_scenario)
+        self._last_alert_prediction = None
+        self._reset_active_decision()
+        self.simulation_has_started = False
+        self.simulation_had_motion = False
+        self.simulation_finished = False
+        self.scenario_editor_message = "Scenarios saved and applied to the simulation."
+        if self.scenario_editor_status is not None:
+            self.scenario_editor_status.text = self.scenario_editor_message
+            self.scenario_editor_status.update_font(font_color=(74, 222, 128))
 
     def _open_general_settings(
         self, _event: arcade.gui.UIOnClickEvent | None = None
@@ -502,6 +800,62 @@ class SimulationWindow(arcade.Window):
 
     def on_draw(self) -> None:
         self.clear()
+        if self.active_screen == "scenario_location_picker":
+            if self.scenario_location_preview is not None:
+                self.scenario_location_preview.draw()
+            cursor_x, cursor_y = self.scenario_location_cursor
+            if cursor_y < self.height - 78:
+                entity_kind, _entity_index = self.scenario_editor_entity
+                entity_top_offset = 34 if entity_kind == "cars" else 22
+                arrow_tip_y = cursor_y + entity_top_offset
+                arrow_base_y = arrow_tip_y + 12
+                marker_color = (190, 145, 25)
+                arcade.draw_line(
+                    cursor_x,
+                    arrow_base_y + 22,
+                    cursor_x,
+                    arrow_base_y,
+                    marker_color,
+                    3,
+                )
+                arcade.draw_triangle_filled(
+                    cursor_x - 7,
+                    arrow_base_y,
+                    cursor_x + 7,
+                    arrow_base_y,
+                    cursor_x,
+                    arrow_tip_y,
+                    marker_color,
+                )
+                self.scenario_location_text.x = cursor_x
+                self.scenario_location_text.y = arrow_base_y + 27
+                self.scenario_location_text.draw()
+                arcade.draw_circle_outline(
+                    cursor_x,
+                    cursor_y,
+                    15,
+                    (42, 177, 230),
+                    2,
+                    num_segments=32,
+                )
+                arcade.draw_line(
+                    cursor_x - 21,
+                    cursor_y,
+                    cursor_x + 21,
+                    cursor_y,
+                    (42, 177, 230),
+                    2,
+                )
+                arcade.draw_line(
+                    cursor_x,
+                    cursor_y - 21,
+                    cursor_x,
+                    cursor_y + 21,
+                    (42, 177, 230),
+                    2,
+                )
+            self.manager.draw()
+            return
         if self.active_screen != "simulation":
             self._draw_navigation_background()
             self.manager.draw()
@@ -555,7 +909,9 @@ class SimulationWindow(arcade.Window):
     def on_key_press(self, symbol: int, modifiers: int) -> None:
         if self.active_screen != "simulation":
             if symbol == arcade.key.ESCAPE:
-                if self.active_screen == "menu":
+                if self.active_screen == "scenario_location_picker":
+                    self._cancel_scenario_location_picker()
+                elif self.active_screen == "menu":
                     self._return_to_simulation()
                 else:
                     self._open_menu()
@@ -565,6 +921,58 @@ class SimulationWindow(arcade.Window):
 
     def on_key_release(self, symbol: int, modifiers: int) -> None:
         self.pressed_keys.discard(symbol)
+
+    def on_mouse_motion(
+        self,
+        x: int,
+        y: int,
+        dx: int,
+        dy: int,
+    ) -> None:
+        if self.active_screen == "scenario_location_picker":
+            entity_kind, entity_index = self.scenario_editor_entity
+            margin = 40.0 if entity_kind == "cars" else 12.0
+            bounded_x = min(max(float(x), margin), self.width - margin)
+            bounded_y = min(max(float(y), margin), self.height - 84.0)
+            self.scenario_location_cursor = (bounded_x, bounded_y)
+            if self.scenario_location_preview is not None:
+                preview_entities = (
+                    self.scenario_location_preview.cars
+                    if entity_kind == "cars"
+                    else self.scenario_location_preview.pedestrians
+                )
+                preview_entities[entity_index].x = bounded_x
+                preview_entities[entity_index].y = bounded_y
+
+    def on_mouse_press(
+        self,
+        x: int,
+        y: int,
+        button: int,
+        modifiers: int,
+    ) -> None:
+        if (
+            self.active_screen != "scenario_location_picker"
+            or button != arcade.MOUSE_BUTTON_LEFT
+            or y >= self.height - 78
+        ):
+            return
+
+        entity_kind, entity_index = self.scenario_editor_entity
+        margin = 40.0 if entity_kind == "cars" else 12.0
+        bounded_x = min(max(float(x), margin), self.width - margin)
+        bounded_y = min(max(float(y), margin), self.height - 84.0)
+        entity = self.scenario_editor_draft[self.scenario_editor_scenario][entity_kind][
+            entity_index
+        ]
+        entity["x"] = bounded_x
+        entity["y_offset"] = bounded_y - self.world.road_y
+        self.scenario_editor_message = (
+            f"Location set to X {bounded_x:.0f}, Y {bounded_y:.0f}. "
+            "Save to make it persistent."
+        )
+        self.scenario_location_preview = None
+        self._show_scenario_editor()
 
     @staticmethod
     def _create_hud_texts() -> dict[str, arcade.Text]:
@@ -973,6 +1381,15 @@ class SimulationWindow(arcade.Window):
         # Arcade may dispatch an initial resize while Window is being constructed.
         if hasattr(self, "world"):
             self.world.resize(width, height)
+        preview = getattr(self, "scenario_location_preview", None)
+        if preview is not None:
+            old_preview_road_y = preview.road_y
+            preview.resize(width, height)
+            cursor_x, cursor_y = self.scenario_location_cursor
+            self.scenario_location_cursor = (
+                cursor_x,
+                cursor_y + preview.road_y - old_preview_road_y,
+            )
 
     def on_close(self) -> None:
         self.manager.disable()

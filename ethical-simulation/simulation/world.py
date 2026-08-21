@@ -1,7 +1,9 @@
 """World state, stepping, reset, and prototype rendering."""
 
 import math
+from collections.abc import Mapping
 from dataclasses import replace
+from typing import Any
 
 import arcade
 
@@ -12,10 +14,19 @@ from simulation.entities import Car, Pedestrian
 class World:
     """Own simulation state; only ``draw`` depends on Arcade rendering."""
 
-    def __init__(self, width: int, height: int, scenario: str = "Scenario 1") -> None:
+    def __init__(
+        self,
+        width: int,
+        height: int,
+        scenario: str = "Scenario 1",
+        scenario_definitions: Mapping[
+            str, Mapping[str, list[dict[str, Any]]]
+        ] | None = None,
+    ) -> None:
         self.width = width
         self.height = height
         self.scenario_name = scenario
+        self.scenario_definitions = scenario_definitions
         self.cars: list[Car] = []
         self.pedestrians: list[Pedestrian] = []
         self.framework_parameters: dict[str, dict[str, float]] = {}
@@ -31,8 +42,10 @@ class World:
         boundary_hit = False
         for car in self.cars:
             car.update(delta_time)
-            self._check_pedestrian_collisions(car)
             boundary_hit = self._keep_car_in_world(car) or boundary_hit
+        self._update_pedestrians(delta_time)
+        for car in self.cars:
+            self._check_pedestrian_collisions(car)
         return boundary_hit
 
     def update_free_drive(
@@ -49,8 +62,27 @@ class World:
         car = self.cars[0]
         car.update_driving(delta_time, throttle, brake, steering)
         boundary_hit = self._keep_car_in_world(car)
-        self._check_pedestrian_collisions(car)
+        for automatic_car in self.cars[1:]:
+            automatic_car.update(delta_time)
+            boundary_hit = self._keep_car_in_world(automatic_car) or boundary_hit
+        self._update_pedestrians(delta_time)
+        for current_car in self.cars:
+            self._check_pedestrian_collisions(current_car)
         return boundary_hit
+
+    def _update_pedestrians(self, delta_time: float) -> None:
+        """Advance living pedestrians and keep them inside the visible map."""
+        playable_top = self.height - 72 - 12
+        for pedestrian in self.pedestrians:
+            pedestrian.update(delta_time)
+            bounded_x = min(max(pedestrian.x, 12.0), self.width - 12.0)
+            bounded_y = min(max(pedestrian.y, 12.0), playable_top)
+            touched_boundary = (
+                bounded_x != pedestrian.x or bounded_y != pedestrian.y
+            )
+            pedestrian.x, pedestrian.y = bounded_x, bounded_y
+            if touched_boundary and pedestrian.action == "random_move":
+                pedestrian.redirect_random_movement()
 
     def stop_free_drive_controls(self) -> None:
         if self.cars:
@@ -195,7 +227,12 @@ class World:
             self._advance_prediction_car(car, delta_time, steering)
 
         boundary_hit = self._keep_car_in_world(car)
-        self._check_pedestrian_collisions(car)
+        for automatic_car in self.cars[1:]:
+            automatic_car.update(delta_time)
+            boundary_hit = self._keep_car_in_world(automatic_car) or boundary_hit
+        self._update_pedestrians(delta_time)
+        for current_car in self.cars:
+            self._check_pedestrian_collisions(current_car)
         return boundary_hit
 
     def braking_metrics(self, braking_deceleration: float = 260.0) -> tuple[float, float]:
@@ -294,10 +331,21 @@ class World:
     def reset(self, scenario: str | None = None) -> None:
         if scenario is not None:
             self.scenario_name = scenario
-        initial = create_scenario(self.scenario_name, self.road_y)
+        initial = create_scenario(
+            self.scenario_name,
+            self.road_y,
+            self.scenario_definitions,
+        )
         self.cars = initial.cars
         self.pedestrians = initial.pedestrians
         self._label_texts.clear()
+
+    def set_scenario_definitions(
+        self,
+        definitions: Mapping[str, Mapping[str, list[dict[str, Any]]]],
+    ) -> None:
+        """Replace the catalog used by future resets."""
+        self.scenario_definitions = definitions
 
     def resize(self, width: int, height: int) -> None:
         old_road_y = self.road_y
