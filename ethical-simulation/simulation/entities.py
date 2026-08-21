@@ -31,48 +31,53 @@ class Car:
     x: float
     y: float
     speed: float = 120.0
-    direction: float = 1.0
-    heading: float = 0.0
-    steering_percent: float = 0.0
-    brake_active: bool = False
+    lane_index: int = 0
+    _lane_change_start_y: float = field(default=0.0, init=False, repr=False)
+    _lane_change_target_y: float = field(default=0.0, init=False, repr=False)
+    _lane_change_target_index: int | None = field(default=None, init=False, repr=False)
+    _lane_change_elapsed: float = field(default=0.0, init=False, repr=False)
+    _lane_change_duration: float = field(default=0.10, init=False, repr=False)
+
+    @property
+    def is_changing_lane(self) -> bool:
+        return self._lane_change_target_index is not None
+
+    def start_lane_change(
+        self,
+        target_lane_index: int,
+        target_y: float,
+        duration: float = 0.10,
+    ) -> bool:
+        """Begin a linear vertical transition without changing vehicle heading."""
+        if self.is_changing_lane or target_lane_index == self.lane_index:
+            return False
+        self._lane_change_start_y = self.y
+        self._lane_change_target_y = target_y
+        self._lane_change_target_index = target_lane_index
+        self._lane_change_elapsed = 0.0
+        self._lane_change_duration = max(0.001, duration)
+        return True
 
     def update(self, delta_time: float) -> None:
-        heading_radians = math.radians(self.heading)
-        self.x += math.cos(heading_radians) * self.speed * self.direction * delta_time
-        self.y += math.sin(heading_radians) * self.speed * self.direction * delta_time
+        self.x += self.speed * delta_time
+        if not self.is_changing_lane:
+            return
 
-    def update_driving(
-        self,
-        delta_time: float,
-        throttle: bool,
-        brake: bool,
-        steering: float,
-    ) -> None:
-        """Apply simple arcade-style driving controls without realistic physics."""
-        max_forward_speed = 260.0
-        acceleration = 145.0
-        braking = 260.0
-        rolling_resistance = 65.0
+        self._lane_change_elapsed += delta_time
+        progress = min(1.0, self._lane_change_elapsed / self._lane_change_duration)
+        self.y = self._lane_change_start_y + (
+            self._lane_change_target_y - self._lane_change_start_y
+        ) * progress
+        if progress >= 1.0:
+            self.y = self._lane_change_target_y
+            self.lane_index = int(self._lane_change_target_index)
+            self._lane_change_target_index = None
 
-        self.brake_active = brake
-        self.steering_percent = max(-1.0, min(1.0, steering)) * 100.0
-
-        if brake:
-            self.speed = max(0.0, self.speed - braking * delta_time)
-        elif throttle:
-            self.speed = min(max_forward_speed, self.speed + acceleration * delta_time)
-        elif self.speed > 0:
-            self.speed = max(0.0, self.speed - rolling_resistance * delta_time)
-        elif self.speed < 0:
-            self.speed = min(0.0, self.speed + rolling_resistance * delta_time)
-
-        if abs(self.speed) > 1.0:
-            reverse_direction = -1.0 if self.speed < 0 else 1.0
-            self.heading -= steering * 105.0 * reverse_direction * delta_time
-
-        heading_radians = math.radians(self.heading)
-        self.x += math.cos(heading_radians) * self.speed * delta_time
-        self.y += math.sin(heading_radians) * self.speed * delta_time
+    def shift_lane_change_y(self, offset: float) -> None:
+        """Keep an in-progress transition aligned after a window resize."""
+        if self.is_changing_lane:
+            self._lane_change_start_y += offset
+            self._lane_change_target_y += offset
 
 
 @dataclass

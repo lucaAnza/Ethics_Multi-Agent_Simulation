@@ -1,8 +1,9 @@
 # Ethical Multi-Agent Simulation
 
-An initial Arcade prototype with a resizable toolbar, switchable scenarios, and a
-minimal top-down world. Simulation state and scenario construction are separate
-from the window so the project can later grow a headless runner.
+An Arcade 3.3 simulation for comparing ethical decision strategies in a
+two-lane autonomous-driving scenario. Physical state and perception are owned by
+the simulation; ethical frameworks receive only the entities currently visible
+in each lane and return one of two actions: `STAY` or `CHANGE_LANE`.
 
 ## Run
 
@@ -13,44 +14,38 @@ pip install -r requirements.txt
 python main.py
 ```
 
-## Scenario Free controls
+## Simulation flow
 
-Select **Scenario Free**, press **Play**, then use:
+The vehicle moves forward automatically at the configured speed. Its current
+lane is outlined by cyan dashed vision lines, while the translucent area marks
+the visible portion of the adjacent lane. When the closest possible collision
+reaches `decision_distance`, the selected ethical framework is called once for
+that incident. A lane change is a linear vertical movement lasting about
+`0.10 s` and is allowed only while the configured `max_spostamenti` budget has
+not been exhausted.
 
-- `W` to accelerate
-- `S` to brake
-- `A` to steer left
-- `D` to steer right
+The **Vehicle Variables** toolbar section controls:
 
-The dashboard in the upper-right corner shows speed, steering percentages, and
-brake status in every scenario. The WASD reminder is shown only in Scenario Free.
+- initial speed in km/h;
+- `vision_distance`, the maximum perception range in pixels;
+- `decision_distance`, the threshold that triggers a decision;
+- `max_spostamenti`, the maximum number of lane changes.
 
-Use the **Time** slider in the top toolbar to change the simulation speed from
-`x0.25` to `x2`. The time scale affects movement, acceleration, braking, and
-steering together.
+The time slider scales all simulation movement. Play, pause, and stop control
+the run; there is no manually driven free mode.
 
-The toolbar is divided into scenario, playback, vehicle-variable, and application
-sections. Use `▶` to play, `||` to pause, and `■` to stop and restore the current
-scenario. The **Initial** slider sets the current scenario's initial speed in km/h.
-The **new_decision_wait** slider controls how long an automatically selected
-ethical action overrides the normal steering or brake command.
+The simulation ends only when the primary vehicle reaches the tunnel. The final
+panel reports lane-change usage, victims grouped by category, and rows supplied
+by the active framework. Utilitarianism reports its total casualty malus and the
+number of decisions retained in its in-memory history.
+
+## Settings
 
 The **Menu** opens framework, scenario, general, and project-info screens.
-Utilitarianism values can be edited and saved from **Framework Settings**;
-**Scenario Settings** lists every scenario and provides an editor for adding,
-removing, and changing cars and pedestrians. **Set Location** opens the selected
-scenario as a clickable map instead of requiring coordinates to be entered by
-hand. New pedestrians start in the center of the window and can remain still,
-move in one of four directions, or move randomly at a configurable speed. Use
-**Save Scenarios** to persist the catalog in `scenarios/scenario_settings.json`;
-the file is validated and loaded automatically at startup. General settings
-remains a placeholder for a future version.
+Utilitarian entity values can be edited in **Framework Settings**. **Scenario
+Settings** provides an editor for cars and pedestrians, including map-based
+placement and pedestrian movement. Saved scenarios are validated and loaded
+from `scenarios/scenario_settings.json` at startup.
 
-When the two-second collision alert turns red, the active ethical framework
-receives four predicted outcomes: continue, steer right, steer left, and brake.
-Utilitarianism chooses the outcome with the lowest configured casualty cost.
-
-After at least one car has moved, the run ends when every car is stationary. A
-centered summary reports each dead pedestrian, or displays the green message
-**Success nobody is dead!** when there were no casualties. Its **Reset** button
-restores the scenario and starts a fresh run from the normal toolbar.
+Kant, Constant, and Ross currently use placeholder strategies that always keep
+the current lane. General settings remains a placeholder.

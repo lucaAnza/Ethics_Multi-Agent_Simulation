@@ -688,7 +688,6 @@ def build_scenario_settings(
 
     if entity_kind == "cars":
         add_input("Speed (km/h)", "speed_kmh", f"{entity['speed'] * 0.18:g}")
-        add_input("Heading (deg)", "heading", f"{entity['heading']:g}")
     else:
         model_row = arcade.gui.UIBoxLayout(
             vertical=False,

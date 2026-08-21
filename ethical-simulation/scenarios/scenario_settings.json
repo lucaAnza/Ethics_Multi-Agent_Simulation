@@ -5,26 +5,25 @@
       "cars": [
         {
           "x": 130.0,
-          "y_offset": -42.0,
-          "speed": 120.00000000000001,
-          "heading": 0.0
+          "y_offset": -45.0,
+          "speed": 120.00000000000001
         }
       ],
       "pedestrians": [
         {
-          "x": 846.0,
-          "y_offset": 139.72000000000003,
+          "x": 981.0,
+          "y_offset": 55.72000000000003,
           "model": "man",
           "label": null,
-          "action": "move_down",
+          "action": "still",
           "speed": 55.0
         },
         {
-          "x": 931.0,
-          "y_offset": -107.27999999999997,
+          "x": 671.0,
+          "y_offset": -42.27999999999997,
           "model": "boy",
           "label": null,
-          "action": "move_up",
+          "action": "still",
           "speed": 45.0
         }
       ]
@@ -33,9 +32,8 @@
       "cars": [
         {
           "x": 130.0,
-          "y_offset": -42.0,
-          "speed": 120.00000000000001,
-          "heading": 0.0
+          "y_offset": -45.0,
+          "speed": 120.0
         }
       ],
       "pedestrians": [
@@ -92,50 +90,6 @@
           "y_offset": -25.0,
           "model": "custom",
           "label": "Alex",
-          "action": "still",
-          "speed": 55.0
-        }
-      ]
-    },
-    "Scenario Free": {
-      "cars": [
-        {
-          "x": 170.0,
-          "y_offset": 0.0,
-          "speed": 0.0,
-          "heading": 0.0
-        }
-      ],
-      "pedestrians": [
-        {
-          "x": 560.0,
-          "y_offset": 35.0,
-          "model": "woman",
-          "label": null,
-          "action": "still",
-          "speed": 55.0
-        },
-        {
-          "x": 760.0,
-          "y_offset": -35.0,
-          "model": "old_man",
-          "label": null,
-          "action": "still",
-          "speed": 55.0
-        },
-        {
-          "x": 930.0,
-          "y_offset": 20.0,
-          "model": "boy",
-          "label": null,
-          "action": "still",
-          "speed": 55.0
-        },
-        {
-          "x": 670.0,
-          "y_offset": 145.0,
-          "model": "custom",
-          "label": "Sam",
           "action": "still",
           "speed": 55.0
         }

@@ -36,7 +36,7 @@ PEDESTRIAN_ACTIONS = {
 DEFAULT_SCENARIO_DEFINITIONS: dict[str, dict[str, list[dict[str, Any]]]] = {
     "Scenario 1": {
         "cars": [
-            {"x": 130.0, "y_offset": -42.0, "speed": 120.0, "heading": 0.0}
+            {"x": 130.0, "y_offset": -45.0, "speed": 120.0}
         ],
         "pedestrians": [
             {
@@ -51,7 +51,7 @@ DEFAULT_SCENARIO_DEFINITIONS: dict[str, dict[str, list[dict[str, Any]]]] = {
     },
     "Scenario 2": {
         "cars": [
-            {"x": 130.0, "y_offset": -42.0, "speed": 120.0, "heading": 0.0}
+            {"x": 130.0, "y_offset": -45.0, "speed": 120.0}
         ],
         "pedestrians": [
             {"x": 400.0, "y_offset": 46.0, "model": "man", "label": None},
@@ -61,17 +61,6 @@ DEFAULT_SCENARIO_DEFINITIONS: dict[str, dict[str, list[dict[str, Any]]]] = {
             {"x": 700.0, "y_offset": 46.0, "model": "boy", "label": None},
             {"x": 775.0, "y_offset": 46.0, "model": "girl", "label": None},
             {"x": 760.0, "y_offset": -25.0, "model": "custom", "label": "Alex"},
-        ],
-    },
-    "Scenario Free": {
-        "cars": [
-            {"x": 170.0, "y_offset": 0.0, "speed": 0.0, "heading": 0.0}
-        ],
-        "pedestrians": [
-            {"x": 560.0, "y_offset": 35.0, "model": "woman", "label": None},
-            {"x": 760.0, "y_offset": -35.0, "model": "old_man", "label": None},
-            {"x": 930.0, "y_offset": 20.0, "model": "boy", "label": None},
-            {"x": 670.0, "y_offset": 145.0, "model": "custom", "label": "Sam"},
         ],
     },
 }
@@ -103,6 +92,8 @@ def validate_scenario_definitions(
     for raw_name, raw_scenario in definitions.items():
         if not isinstance(raw_name, str) or not raw_name.strip():
             raise ValueError("scenario names must be non-empty strings")
+        if raw_name.strip() == "Scenario Free":
+            continue
         if not isinstance(raw_scenario, Mapping):
             raise ValueError(f"{raw_name} must be an object")
 
@@ -118,18 +109,17 @@ def validate_scenario_definitions(
             if not isinstance(raw_car, Mapping):
                 raise ValueError(f"{raw_name}.cars[{index}] must be an object")
             speed = _finite_number(raw_car.get("speed", 120.0), "speed")
-            if speed < 0:
-                raise ValueError("car speed cannot be negative")
+            if speed <= 0:
+                raise ValueError("car speed must be greater than zero")
             cars.append(
                 {
                     "x": _finite_number(raw_car.get("x"), "x"),
-                    "y_offset": _finite_number(
-                        raw_car.get("y_offset"), "y_offset"
+                    "y_offset": (
+                        45.0
+                        if _finite_number(raw_car.get("y_offset"), "y_offset") >= 0
+                        else -45.0
                     ),
                     "speed": speed,
-                    "heading": _finite_number(
-                        raw_car.get("heading", 0.0), "heading"
-                    ),
                 }
             )
 
@@ -168,6 +158,8 @@ def validate_scenario_definitions(
             "pedestrians": pedestrians,
         }
 
+    if not normalized:
+        raise ValueError("the scenario catalog must contain a non-free scenario")
     return normalized
 
 
@@ -219,7 +211,7 @@ def create_scenario(
             x=float(car["x"]),
             y=road_y + float(car["y_offset"]),
             speed=float(car.get("speed", 120.0)),
-            heading=float(car.get("heading", 0.0)),
+            lane_index=1 if float(car["y_offset"]) >= 0 else 0,
         )
         for car in definition["cars"]
     ]

@@ -7,6 +7,7 @@ import webbrowser
 import arcade
 import arcade.gui
 
+from ethics.base import CHANGE_LANE, STAY, EthicalDecision
 from ethics.utilitarian import DEFAULT_ENTITIES_VALUES
 from ethics.constant import ConstantFramework
 from ethics.kant import KantFramework
@@ -54,21 +55,22 @@ class SimulationWindow(arcade.Window):
         self.active_screen = "simulation"
         self.is_running = False
         self.time_scale = 1.0
-        self.new_decision_wait = 1.0
-        self.active_decision: str | None = None
-        self.decision_wait_remaining = 0.0
-        self.simulation_has_started = False
-        self.simulation_had_motion = False
+        self.vision_distance = 300.0
+        self.decision_distance = 120.0
+        self.max_spostamenti = 2
         self.simulation_finished = False
-        self.pressed_keys: set[int] = set()
-        self._last_alert_prediction: tuple[int, ...] | None = None
-        self._last_decision_alert: tuple[int, ...] | None = None
+        self.last_decision: EthicalDecision | None = None
 
         self.world = World(
             self.width,
             self.height,
             self.current_scenario,
             self.scenario_definitions,
+        )
+        self.world.configure_vehicle(
+            vision_distance=self.vision_distance,
+            decision_distance=self.decision_distance,
+            max_spostamenti=self.max_spostamenti,
         )
         self.framework_settings = {
             "Utilitarianism": dict(DEFAULT_ENTITIES_VALUES),
@@ -81,7 +83,6 @@ class SimulationWindow(arcade.Window):
             "Constant": ConstantFramework(),
             "Ross": RossFramework(),
         }
-        self.world.framework_parameters = self.framework_settings
         self.utilitarian_entity_inputs: dict[str, arcade.gui.UIInputText] = {}
         self.framework_status_label: arcade.gui.UILabel | None = None
         self.scenario_initial_speeds = {
@@ -110,7 +111,7 @@ class SimulationWindow(arcade.Window):
             bold=True,
         )
         self._hud_texts = self._create_hud_texts()
-        self._prediction_texts = self._create_prediction_texts()
+        self._perception_texts = self._create_perception_texts()
         self._end_texts = self._create_end_texts()
         self.manager = arcade.gui.UIManager()
         self._setup_toolbar()
@@ -149,23 +150,26 @@ class SimulationWindow(arcade.Window):
             holder.add(label, anchor_x="left", anchor_y="center")
             return holder, label
 
-        row = arcade.gui.UIBoxLayout(vertical=False, space_between=20)
+        row = arcade.gui.UIBoxLayout(vertical=False, space_between=10)
 
         selection_controls = arcade.gui.UIBoxLayout(vertical=False, space_between=5)
         framework = selection_controls.add(
             arcade.gui.UIDropdown(
-                default=self.current_framework, options=FRAMEWORKS, width=135, height=34
+                default=self.current_framework,
+                options=FRAMEWORKS,
+                width=130,
+                height=34,
             )
         )
         scenario = selection_controls.add(
             arcade.gui.UIDropdown(
                 default=self.current_scenario,
                 options=self.scenario_names,
-                width=110,
+                width=105,
                 height=34,
             )
         )
-        row.add(section("FRAMEWORK / SIMULATION", selection_controls, 250))
+        row.add(section("FRAMEWORK / SIMULATION", selection_controls, 240))
         row.add(separator())
 
         playback_controls = arcade.gui.UIBoxLayout(vertical=False, space_between=5)
@@ -184,64 +188,98 @@ class SimulationWindow(arcade.Window):
             )
         )
         for label, handler, width in (
-            ("play", self._play, 38),
-            ("||", self._pause, 38),
-            ("reset", self._stop, 38),
+            (">", self._play, 34),
+            ("||", self._pause, 34),
+            ("[]", self._stop, 34),
         ):
             button = playback_controls.add(
                 arcade.gui.UIFlatButton(text=label, width=width, height=34)
             )
             button.on_click = handler
-        row.add(section("TIME / CONTROLS", playback_controls, 271))
+        row.add(section("TIME / CONTROLS", playback_controls, 239))
         row.add(separator())
 
-        vehicle_controls = arcade.gui.UIBoxLayout(vertical=False, space_between=5)
+        vehicle_controls = arcade.gui.UIBoxLayout(vertical=False, space_between=4)
         initial_kmh = self.scenario_initial_speeds[self.current_scenario] * 0.18
         initial_holder, self.initial_speed_label = fixed_label(
-            f"Initial {initial_kmh:02.0f}", 70
+            f"Speed {initial_kmh:02.0f}", 52, font_size=8
         )
         vehicle_controls.add(initial_holder)
         self.initial_speed_slider = vehicle_controls.add(
             arcade.gui.UISlider(
                 value=initial_kmh,
-                min_value=0,
+                min_value=5,
                 max_value=50,
                 step=1,
-                width=75,
+                width=48,
                 height=26,
             )
         )
-        wait_holder, self.new_decision_wait_label = fixed_label(
-            f"new_decision_wait {self.new_decision_wait:.2f}s",
-            135,
+        vision_holder, self.vision_distance_label = fixed_label(
+            f"Vision {self.vision_distance:.0f}",
+            62,
             font_size=8,
         )
-        vehicle_controls.add(wait_holder)
-        new_decision_wait_slider = vehicle_controls.add(
+        vehicle_controls.add(vision_holder)
+        self.vision_distance_slider = vehicle_controls.add(
             arcade.gui.UISlider(
-                value=self.new_decision_wait,
-                min_value=0.25,
-                max_value=3.0,
-                step=0.25,
-                width=65,
+                value=self.vision_distance,
+                min_value=150,
+                max_value=500,
+                step=10,
+                width=50,
                 height=26,
             )
         )
-        row.add(section("VEHICLE VARIABLES", vehicle_controls, 360))
+        decision_holder, self.decision_distance_label = fixed_label(
+            f"Decision {self.decision_distance:.0f}",
+            72,
+            font_size=8,
+        )
+        vehicle_controls.add(decision_holder)
+        self.decision_distance_slider = vehicle_controls.add(
+            arcade.gui.UISlider(
+                value=self.decision_distance,
+                min_value=30,
+                max_value=250,
+                step=10,
+                width=50,
+                height=26,
+            )
+        )
+        shifts_holder, self.max_spostamenti_label = fixed_label(
+            f"Max shifts {self.max_spostamenti}",
+            60,
+            font_size=8,
+        )
+        vehicle_controls.add(shifts_holder)
+        self.max_spostamenti_slider = vehicle_controls.add(
+            arcade.gui.UISlider(
+                value=self.max_spostamenti,
+                min_value=0,
+                max_value=5,
+                step=1,
+                width=42,
+                height=26,
+            )
+        )
+        row.add(section("VEHICLE VARIABLES", vehicle_controls, 448))
         row.add(separator())
 
         app_controls = arcade.gui.UIBoxLayout(vertical=False, space_between=5)
         menu_button = app_controls.add(
-            arcade.gui.UIFlatButton(text="Menu", width=125, height=34)
+            arcade.gui.UIFlatButton(text="Menu", width=82, height=34)
         )
         menu_button.on_click = self._open_menu
-        row.add(section("APPLICATION", app_controls, 125))
+        row.add(section("APPLICATION", app_controls, 82))
 
         framework.on_change = self._framework_changed
         scenario.on_change = self._scenario_changed
         time_slider.on_change = self._time_scale_changed
         self.initial_speed_slider.on_change = self._initial_speed_changed
-        new_decision_wait_slider.on_change = self._new_decision_wait_changed
+        self.vision_distance_slider.on_change = self._vision_distance_changed
+        self.decision_distance_slider.on_change = self._decision_distance_changed
+        self.max_spostamenti_slider.on_change = self._max_spostamenti_changed
         anchor = arcade.gui.UIAnchorLayout()
         anchor.add(row, anchor_x="center", anchor_y="top", align_y=-8)
         self.manager.add(anchor)
@@ -249,22 +287,32 @@ class SimulationWindow(arcade.Window):
     def _framework_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
         if event.new_value is not None:
             self.current_framework = event.new_value
-            self._reset_active_decision()
+            self.last_decision = None
+
+    def _reset_framework_state(self) -> None:
+        for framework in self.ethical_frameworks.values():
+            framework.reset()
+
+    def _reset_run_state(self) -> None:
+        self.is_running = False
+        self.simulation_finished = False
+        self.last_decision = None
+        self._reset_framework_state()
 
     def _scenario_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
         if event.new_value is not None:
             self.current_scenario = event.new_value
-            self.pressed_keys.clear()
             self.world.reset(self.current_scenario)
+            self.world.configure_vehicle(
+                vision_distance=self.vision_distance,
+                decision_distance=self.decision_distance,
+                max_spostamenti=self.max_spostamenti,
+            )
             speed = self.scenario_initial_speeds[self.current_scenario]
             self.world.cars[0].speed = speed
             self.initial_speed_slider.value = speed * 0.18
-            self.initial_speed_label.text = f"Initial {speed * 0.18:02.0f}"
-            self._last_alert_prediction = None
-            self._reset_active_decision()
-            self.simulation_has_started = False
-            self.simulation_had_motion = False
-            self.simulation_finished = False
+            self.initial_speed_label.text = f"Speed {speed * 0.18:02.0f}"
+            self._reset_run_state()
 
     def _time_scale_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
         if event.new_value is not None:
@@ -277,86 +325,111 @@ class SimulationWindow(arcade.Window):
             speed = speed_kmh / 0.18
             self.scenario_initial_speeds[self.current_scenario] = speed
             self.world.cars[0].speed = speed
-            self.initial_speed_label.text = f"Initial {speed_kmh:02.0f}"
-            self._last_alert_prediction = None
-            self.simulation_has_started = False
-            self.simulation_had_motion = False
-            self.simulation_finished = False
+            self.initial_speed_label.text = f"Speed {speed_kmh:02.0f}"
 
-    def _new_decision_wait_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
+    def _vision_distance_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
         if event.new_value is not None:
-            self.new_decision_wait = float(event.new_value)
-            self.new_decision_wait_label.text = (
-                f"new_decision_wait {self.new_decision_wait:.2f}s"
+            self.vision_distance = float(event.new_value)
+            if self.decision_distance > self.vision_distance:
+                self.decision_distance = self.vision_distance
+                self.decision_distance_slider.value = self.decision_distance
+                self.decision_distance_label.text = (
+                    f"Decision {self.decision_distance:.0f}"
+                )
+            self.vision_distance_label.text = f"Vision {self.vision_distance:.0f}"
+            self.world.configure_vehicle(
+                vision_distance=self.vision_distance,
+                decision_distance=self.decision_distance,
             )
+
+    def _decision_distance_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
+        if event.new_value is not None:
+            requested_distance = float(event.new_value)
+            self.decision_distance = min(requested_distance, self.vision_distance)
+            if requested_distance != self.decision_distance:
+                self.decision_distance_slider.value = self.decision_distance
+            self.decision_distance_label.text = (
+                f"Decision {self.decision_distance:.0f}"
+            )
+            self.world.configure_vehicle(
+                decision_distance=self.decision_distance,
+            )
+
+    def _max_spostamenti_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
+        if event.new_value is not None:
+            requested_max = int(round(float(event.new_value)))
+            self.world.configure_vehicle(max_spostamenti=requested_max)
+            self.max_spostamenti = self.world.max_spostamenti
+            if requested_max != self.max_spostamenti:
+                self.max_spostamenti_slider.value = self.max_spostamenti
+            self.max_spostamenti_label.text = f"Max shifts {self.max_spostamenti}"
 
     def _play(self, _event: arcade.gui.UIOnClickEvent) -> None:
         if self.simulation_finished:
             return
-        self.simulation_has_started = True
         self.is_running = True
 
     def _pause(self, _event: arcade.gui.UIOnClickEvent) -> None:
         self.is_running = False
-        self.world.stop_free_drive_controls()
-
-    def _reset_active_decision(self) -> None:
-        self.active_decision = None
-        self.decision_wait_remaining = 0.0
-        self._last_decision_alert = None
-        self.world.stop_free_drive_controls()
 
     def _maybe_trigger_ethical_decision(self) -> None:
-        casualties = self.world.predict_current_course_casualties(seconds=2.0)
-        alert_signature = tuple(id(person) for person in casualties)
-        if not casualties:
-            self._last_decision_alert = None
+        context = self.world.next_decision_context()
+        if context is None:
             return
-        if self.active_decision is not None:
-            return
-        if alert_signature == self._last_decision_alert:
-            return
-
-        self._last_decision_alert = alert_signature
-        decision_state = self.world.build_ethical_decision_state(seconds=2.0)
         framework = self.ethical_frameworks.get(self.current_framework)
-        decision = framework.decide(decision_state) if framework else "continue"
-        valid_decisions = {"continue", "steer_right", "steer_left", "brake"}
-        if decision not in valid_decisions:
-            decision = "continue"
+        decision = (
+            framework.decide(context.state)
+            if framework is not None
+            else EthicalDecision(STAY, "No active framework; keeping the current lane")
+        )
+        if decision.action not in {STAY, CHANGE_LANE}:
+            decision = EthicalDecision(STAY, "Invalid framework action; staying in lane")
+        if framework is not None:
+            # The history describes the ethical recommendation. Enforcement of
+            # the lane-change budget remains a simulation responsibility.
+            framework.record_decision(decision)
+
+        actual_decision = decision
+        lane_change_started = False
+        if decision.action == CHANGE_LANE:
+            lane_change_started = self.world.request_lane_change()
+            if not lane_change_started:
+                actual_decision = EthicalDecision(STAY, decision.reason)
+
+        self.world.mark_decision_handled(context)
+        self.last_decision = actual_decision
 
         print(f"\n[ETHICAL DECISION] Framework: {self.current_framework}")
-        for alternative in decision_state["alternatives"]:
-            print(
-                f"  {alternative['action']}: "
-                f"{len(alternative['casualties'])} predicted kill(s)"
-            )
-        print(f"  Selected action: {decision}")
-
-        if decision != "continue":
-            self.active_decision = decision
-            self.decision_wait_remaining = self.new_decision_wait
+        print(
+            "  Current lane entities: "
+            f"{len(context.state['current_lane_entities'])}"
+        )
+        print(
+            "  Other lane entities: "
+            f"{len(context.state['other_lane_entities'])}"
+        )
+        print(f"  Framework action: {decision.action}")
+        print(f"  Applied action: {actual_decision.action}")
+        print(f"  Reason: {actual_decision.reason}")
+        if decision.action == CHANGE_LANE and not lane_change_started:
+            print("  Lane change unavailable: max_spostamenti reached.")
 
     def _stop(self, _event: arcade.gui.UIOnClickEvent) -> None:
-        self.is_running = False
-        self.pressed_keys.clear()
         self.world.reset()
+        self.world.configure_vehicle(
+            vision_distance=self.vision_distance,
+            decision_distance=self.decision_distance,
+            max_spostamenti=self.max_spostamenti,
+        )
         self.world.cars[0].speed = self.scenario_initial_speeds[self.current_scenario]
-        self.world.stop_free_drive_controls()
-        self._last_alert_prediction = None
-        self._reset_active_decision()
-        self.simulation_has_started = False
-        self.simulation_had_motion = False
-        self.simulation_finished = False
+        self._reset_run_state()
 
     def _show_simulation_end(self) -> None:
         self.is_running = False
         self.simulation_finished = True
-        self._reset_active_decision()
         self.manager.clear()
 
-        dead_count = len(self.world.dead_pedestrians())
-        panel_height = 178 + dead_count * 20
+        panel_height = 350
         reset_button = arcade.gui.UIFlatButton(
             text="Reset",
             width=190,
@@ -380,7 +453,6 @@ class SimulationWindow(arcade.Window):
 
     def _open_menu(self, _event: arcade.gui.UIOnClickEvent | None = None) -> None:
         self._pause(None)
-        self.pressed_keys.clear()
         self.active_screen = "menu"
         self.manager.clear()
         build_menu(
@@ -525,16 +597,10 @@ class SimulationWindow(arcade.Window):
             return value
 
         if entity_kind == "cars":
-            speed_kmh = number("speed_kmh", "Speed", minimum=0.0)
-            heading = number("heading", "Heading")
-            if speed_kmh is None or heading is None:
+            speed_kmh = number("speed_kmh", "Speed", minimum=0.1)
+            if speed_kmh is None:
                 return False
-            entity.update(
-                {
-                    "speed": speed_kmh / 0.18,
-                    "heading": heading,
-                }
-            )
+            entity.update({"speed": speed_kmh / 0.18})
         else:
             selected_label = (
                 self.scenario_editor_model.value
@@ -602,9 +668,8 @@ class SimulationWindow(arcade.Window):
         cars.append(
             {
                 "x": 130.0 + 110.0 * len(cars),
-                "y_offset": -42.0,
+                "y_offset": -45.0,
                 "speed": 120.0,
-                "heading": 0.0,
             }
         )
         self.scenario_editor_entity = ("cars", len(cars) - 1)
@@ -712,11 +777,12 @@ class SimulationWindow(arcade.Window):
         }
         self.world.set_scenario_definitions(saved_definitions)
         self.world.reset(self.current_scenario)
-        self._last_alert_prediction = None
-        self._reset_active_decision()
-        self.simulation_has_started = False
-        self.simulation_had_motion = False
-        self.simulation_finished = False
+        self.world.configure_vehicle(
+            vision_distance=self.vision_distance,
+            decision_distance=self.decision_distance,
+            max_spostamenti=self.max_spostamenti,
+        )
+        self._reset_run_state()
         self.scenario_editor_message = "Scenarios saved and applied to the simulation."
         if self.scenario_editor_status is not None:
             self.scenario_editor_status.text = self.scenario_editor_message
@@ -751,58 +817,18 @@ class SimulationWindow(arcade.Window):
         if self.active_screen != "simulation":
             return
 
-        boundary_hit = False
         if self.is_running:
-            if not self.world.all_cars_stopped():
-                self.simulation_had_motion = True
             scaled_delta_time = delta_time * self.time_scale
             self._maybe_trigger_ethical_decision()
-            if self.active_decision is not None:
-                boundary_hit = self.world.update_decision_action(
-                    scaled_delta_time,
-                    self.active_decision,
-                )
-                self.decision_wait_remaining -= scaled_delta_time
-                if self.decision_wait_remaining <= 0:
-                    self.active_decision = None
-                    self.decision_wait_remaining = 0.0
-                    self.world.stop_free_drive_controls()
-            elif self.current_scenario == "Scenario Free":
-                steering = float(arcade.key.D in self.pressed_keys) - float(
-                    arcade.key.A in self.pressed_keys
-                )
-                boundary_hit = self.world.update_free_drive(
-                    scaled_delta_time,
-                    throttle=arcade.key.W in self.pressed_keys,
-                    brake=arcade.key.S in self.pressed_keys,
-                    steering=steering,
-                )
-            else:
-                boundary_hit = self.world.update(scaled_delta_time)
-
-            if not self.world.all_cars_stopped():
-                self.simulation_had_motion = True
-
-        if boundary_hit:
-            self.is_running = False
-            self._reset_active_decision()
-            print("Simulation paused: the vehicle reached the world boundary.")
-
-        if (
-            self.simulation_has_started
-            and self.simulation_had_motion
-            and not self.simulation_finished
-            and self.world.all_cars_stopped()
-        ):
-            self._show_simulation_end()
-
-        self._print_prediction_debug_if_changed()
+            reached_tunnel = self.world.update(scaled_delta_time)
+            if reached_tunnel and not self.simulation_finished:
+                self._show_simulation_end()
 
     def on_draw(self) -> None:
         self.clear()
         if self.active_screen == "scenario_location_picker":
             if self.scenario_location_preview is not None:
-                self.scenario_location_preview.draw()
+                self.scenario_location_preview.draw(show_vehicle_vision=False)
             cursor_x, cursor_y = self.scenario_location_cursor
             if cursor_y < self.height - 78:
                 entity_kind, _entity_index = self.scenario_editor_entity
@@ -873,8 +899,8 @@ class SimulationWindow(arcade.Window):
             (80, 91, 105),
             2,
         )
-        self._draw_current_course_prediction()
-        self._draw_vehicle_hud(show_controls=self.current_scenario == "Scenario Free")
+        self._draw_vehicle_perception()
+        self._draw_vehicle_hud()
         if self.simulation_finished:
             self._draw_simulation_end_overlay()
         self.manager.draw()
@@ -915,12 +941,6 @@ class SimulationWindow(arcade.Window):
                     self._return_to_simulation()
                 else:
                     self._open_menu()
-            return
-        if symbol in {arcade.key.W, arcade.key.A, arcade.key.S, arcade.key.D}:
-            self.pressed_keys.add(symbol)
-
-    def on_key_release(self, symbol: int, modifiers: int) -> None:
-        self.pressed_keys.discard(symbol)
 
     def on_mouse_motion(
         self,
@@ -933,7 +953,10 @@ class SimulationWindow(arcade.Window):
             entity_kind, entity_index = self.scenario_editor_entity
             margin = 40.0 if entity_kind == "cars" else 12.0
             bounded_x = min(max(float(x), margin), self.width - margin)
-            bounded_y = min(max(float(y), margin), self.height - 84.0)
+            if entity_kind == "cars":
+                bounded_y = min(self.world.lane_centers, key=lambda lane_y: abs(y - lane_y))
+            else:
+                bounded_y = min(max(float(y), margin), self.height - 84.0)
             self.scenario_location_cursor = (bounded_x, bounded_y)
             if self.scenario_location_preview is not None:
                 preview_entities = (
@@ -943,6 +966,10 @@ class SimulationWindow(arcade.Window):
                 )
                 preview_entities[entity_index].x = bounded_x
                 preview_entities[entity_index].y = bounded_y
+                if entity_kind == "cars":
+                    preview_entities[entity_index].lane_index = (
+                        1 if bounded_y > self.world.road_y else 0
+                    )
 
     def on_mouse_press(
         self,
@@ -961,12 +988,19 @@ class SimulationWindow(arcade.Window):
         entity_kind, entity_index = self.scenario_editor_entity
         margin = 40.0 if entity_kind == "cars" else 12.0
         bounded_x = min(max(float(x), margin), self.width - margin)
-        bounded_y = min(max(float(y), margin), self.height - 84.0)
+        if entity_kind == "cars":
+            bounded_y = min(self.world.lane_centers, key=lambda lane_y: abs(y - lane_y))
+        else:
+            bounded_y = min(max(float(y), margin), self.height - 84.0)
         entity = self.scenario_editor_draft[self.scenario_editor_scenario][entity_kind][
             entity_index
         ]
         entity["x"] = bounded_x
-        entity["y_offset"] = bounded_y - self.world.road_y
+        entity["y_offset"] = (
+            45.0 if entity_kind == "cars" and bounded_y > self.world.road_y
+            else -45.0 if entity_kind == "cars"
+            else bounded_y - self.world.road_y
+        )
         self.scenario_editor_message = (
             f"Location set to X {bounded_x:.0f}, Y {bounded_y:.0f}. "
             "Save to make it persistent."
@@ -976,7 +1010,12 @@ class SimulationWindow(arcade.Window):
 
     @staticmethod
     def _create_hud_texts() -> dict[str, arcade.Text]:
-        def text(font_size: int, *, anchor_x: str = "left", bold: bool = False) -> arcade.Text:
+        def text(
+            font_size: int,
+            *,
+            anchor_x: str = "left",
+            bold: bool = False,
+        ) -> arcade.Text:
             return arcade.Text(
                 "",
                 0,
@@ -992,14 +1031,11 @@ class SimulationWindow(arcade.Window):
             "title": text(11, bold=True),
             "speed": text(28, anchor_x="right", bold=True),
             "unit": text(10),
-            "steering_title": text(9),
-            "steering_value": text(10, anchor_x="center", bold=True),
-            "brake": text(10, bold=True),
-            "danger": text(10, bold=True),
-            "controls_title": text(9, bold=True),
-            "control_w": text(9),
-            "control_s": text(9),
-            "control_ad": text(9),
+            "lane": text(10, bold=True),
+            "changes": text(10),
+            "vision": text(9),
+            "decision": text(9),
+            "last_action": text(9, bold=True),
         }
 
     def _set_hud_text(self, name: str, content: str, x: float, y: float) -> None:
@@ -1010,7 +1046,7 @@ class SimulationWindow(arcade.Window):
         text.draw()
 
     @staticmethod
-    def _create_prediction_texts() -> dict[str, arcade.Text]:
+    def _create_perception_texts() -> dict[str, arcade.Text]:
         texts = {
             "title": arcade.Text("", 0, 0, (238, 243, 248), 11, bold=True),
             "subtitle": arcade.Text("", 0, 0, (155, 170, 185), 8),
@@ -1056,7 +1092,7 @@ class SimulationWindow(arcade.Window):
             ),
         }
         for index in range(20):
-            texts[f"person_{index}"] = arcade.Text(
+            texts[f"detail_{index}"] = arcade.Text(
                 "",
                 0,
                 0,
@@ -1066,23 +1102,10 @@ class SimulationWindow(arcade.Window):
             )
         return texts
 
-    @staticmethod
-    def _end_person_description(person: Pedestrian) -> str:
-        descriptions = {
-            "man": "Adult (M)",
-            "woman": "Adult (F)",
-            "old_man": "Senior (M)",
-            "old_woman": "Senior (F)",
-            "boy": "Child (M)",
-            "girl": "Child (F)",
-            "custom": f"Custom [{person.label or 'unnamed'}]",
-        }
-        return descriptions[person.model]
-
     def _draw_simulation_end_overlay(self) -> None:
         dead = self.world.dead_pedestrians()
         panel_width = 520
-        panel_height = 178 + len(dead) * 20
+        panel_height = 350
         panel_left = (self.width - panel_width) / 2
         panel_bottom = (self.height - panel_height) / 2
         panel_top = panel_bottom + panel_height
@@ -1118,27 +1141,62 @@ class SimulationWindow(arcade.Window):
 
         status = self._end_texts["status"]
         if dead:
-            status.text = f"Deaths: {len(dead)}"
+            status.text = f"Tunnel reached · Victims: {len(dead)}"
             status.color = (238, 68, 68)
         else:
-            status.text = "Success nobody is dead!"
+            status.text = "Tunnel reached · Success nobody is dead!"
             status.color = (79, 196, 123)
         status.x, status.y = center_x, panel_top - 72
         status.draw()
 
-        for index, person in enumerate(dead):
-            person_text = self._end_texts[f"person_{index}"]
-            person_text.text = f"{index + 1}. {self._end_person_description(person)}"
-            person_text.x = panel_left + 58
-            person_text.y = panel_top - 105 - index * 20
-            person_text.draw()
+        category_counts = {"Child": 0, "Adult": 0, "Elderly": 0, "Custom": 0}
+        for person in dead:
+            if person.model in {"boy", "girl"}:
+                category_counts["Child"] += 1
+            elif person.model in {"old_man", "old_woman"}:
+                category_counts["Elderly"] += 1
+            elif person.model == "custom":
+                category_counts["Custom"] += 1
+            else:
+                category_counts["Adult"] += 1
+
+        summary_lines = [
+            (
+                f"Lane changes: {self.world.lane_changes_used} / "
+                f"{self.world.max_spostamenti}"
+            ),
+            f"Child: {category_counts['Child']}",
+            f"Adult: {category_counts['Adult']}",
+            f"Elderly: {category_counts['Elderly']}",
+        ]
+        if category_counts["Custom"]:
+            summary_lines.append(f"Custom: {category_counts['Custom']}")
+        summary_lines.append(f"Framework: {self.current_framework}")
+
+        framework = self.ethical_frameworks.get(self.current_framework)
+        casualties = [
+            {"model": person.model, "label": person.label}
+            for person in dead
+        ]
+        if framework is not None:
+            summary_lines.extend(
+                f"{label}: {value}"
+                for label, value in framework.summary(casualties)
+            )
+
+        for index, line in enumerate(summary_lines):
+            detail = self._end_texts[f"detail_{index}"]
+            detail.text = line
+            detail.x = panel_left + 58
+            detail.y = panel_top - 108 - index * 22
+            detail.draw()
 
         hint = self._end_texts["hint"]
         hint.text = "Click Reset to start a new simulation."
         hint.x, hint.y = center_x, panel_bottom + 24
         hint.draw()
 
-    def _set_prediction_text(
+    def _set_perception_text(
         self,
         name: str,
         content: str,
@@ -1146,7 +1204,7 @@ class SimulationWindow(arcade.Window):
         y: float,
         color: tuple[int, int, int] | None = None,
     ) -> None:
-        text = self._prediction_texts[name]
+        text = self._perception_texts[name]
         text.text = content
         text.x = x
         text.y = y
@@ -1171,62 +1229,23 @@ class SimulationWindow(arcade.Window):
             counts[label] = counts.get(label, 0) + 1
 
         if not counts:
-            return ["No casualties predicted"]
+            return ["No visible entities"]
         return [f"{label}: {count}" for label, count in counts.items()]
 
-    @staticmethod
-    def _person_description(person: Pedestrian) -> str:
-        descriptions = {
-            "man": "Adult (♂)",
-            "woman": "Adult (♀)",
-            "old_man": "Senior (♂)",
-            "old_woman": "Senior (♀)",
-            "boy": "Child (♂)",
-            "girl": "Child (♀)",
-            "custom": f"Custom [{person.label or 'unnamed'}]",
-        }
-        return descriptions[person.model]
-
-    def _print_prediction_debug_if_changed(self) -> None:
-        current_casualties = self.world.predict_current_course_casualties(seconds=2.0)
-        alert_signature = tuple(
-            id(person) for person in current_casualties
-        )
-        if alert_signature == self._last_alert_prediction:
-            return
-        self._last_alert_prediction = alert_signature
-
-        outcomes = self.world.predict_action_outcomes(seconds=2.0)
-        stop_time, stop_distance = self.world.braking_metrics()
-        current_people = ", ".join(
-            self._person_description(person) for person in current_casualties
-        )
-        current_result = current_people if current_people else "no casualties"
-        print(f"\n[ALERT CHANGED] {self.current_scenario} — next 2 seconds")
-        print(
-            f"  Current course: {len(current_casualties)} kill(s) — {current_result}"
-        )
-        print("  Alternative actions:")
-        for action, casualties in outcomes.items():
-            people = ", ".join(self._person_description(person) for person in casualties)
-            result = people if people else "no casualties"
-            extra = (
-                f" | stop time {stop_time:.2f}s, stop distance {stop_distance:.1f}px"
-                if action == "Brake only"
-                else ""
-            )
-            print(f"  {action}: {len(casualties)} kill(s) — {result}{extra}")
-
-    def _draw_current_course_prediction(self) -> None:
-        casualties = self.world.predict_current_course_casualties(seconds=2.0)
+    def _draw_vehicle_perception(self) -> None:
+        current_entities, other_entities = self.world.visible_lane_entities()
+        incident_distance = self.world.next_incident_distance()
         panel_left = 14
         panel_width = 300
         panel_height = 250
         panel_top = self.height - TOOLBAR_HEIGHT - 14
         panel_bottom = panel_top - panel_height
         content_left = panel_left + 16
-        collision = bool(casualties)
-        accent = (238, 68, 68) if collision else (79, 196, 123)
+        decision_due = (
+            incident_distance is not None
+            and incident_distance <= self.world.decision_distance
+        )
+        accent = (238, 68, 68) if decision_due else (42, 177, 230)
 
         arcade.draw_lbwh_rectangle_filled(
             panel_left,
@@ -1244,16 +1263,24 @@ class SimulationWindow(arcade.Window):
             1,
         )
         arcade.draw_lbwh_rectangle_filled(panel_left, panel_top - 4, panel_width, 4, accent)
-        self._set_prediction_text("title", "PROJECTED KILLS · 2s", content_left, panel_top - 26)
-        self._set_prediction_text(
+        self._set_perception_text(
+            "title",
+            "VEHICLE PERCEPTION",
+            content_left,
+            panel_top - 26,
+        )
+        self._set_perception_text(
             "subtitle",
-            "IF THE CURRENT COURSE CONTINUES",
+            (
+                f"VISION {self.world.vision_distance:.0f}px  ·  "
+                f"DECISION {self.world.decision_distance:.0f}px"
+            ),
             content_left,
             panel_top - 43,
         )
         card_top = panel_top - 58
         card_bottom = panel_bottom + 15
-        card_color = (69, 30, 35, 235) if collision else (27, 52, 45, 235)
+        card_color = (69, 30, 35, 235) if decision_due else (25, 43, 55, 235)
         arcade.draw_lbwh_rectangle_filled(
             content_left,
             card_bottom,
@@ -1264,14 +1291,26 @@ class SimulationWindow(arcade.Window):
         arcade.draw_lbwh_rectangle_filled(
             content_left, card_bottom, 4, card_top - card_bottom, accent
         )
-        status = (
-            f"COLLISION · {len(casualties)} KILL{'S' if len(casualties) != 1 else ''}"
-            if collision
-            else "SAFE · 0 KILLS"
+        if incident_distance is None:
+            status = "CURRENT LANE CLEAR"
+        elif decision_due:
+            status = f"DECISION ZONE · {incident_distance:.0f}px"
+        else:
+            status = f"TRACKING INCIDENT · {incident_distance:.0f}px"
+        self._set_perception_text(
+            "status",
+            status,
+            content_left + 13,
+            card_top - 25,
+            accent,
         )
-        self._set_prediction_text("status", status, content_left + 13, card_top - 25, accent)
-        for index, detail in enumerate(self._demographic_lines(casualties)):
-            self._set_prediction_text(
+
+        details = [f"Current lane: {len(current_entities)}"]
+        details.extend(f"  {line}" for line in self._demographic_lines(current_entities))
+        details.append(f"Adjacent lane: {len(other_entities)}")
+        details.extend(f"  {line}" for line in self._demographic_lines(other_entities))
+        for index, detail in enumerate(details[:7]):
+            self._set_perception_text(
                 f"detail_{index}",
                 detail,
                 content_left + 13,
@@ -1279,14 +1318,12 @@ class SimulationWindow(arcade.Window):
                 (210, 218, 226),
             )
 
-    def _draw_vehicle_hud(self, show_controls: bool) -> None:
+    def _draw_vehicle_hud(self) -> None:
         car = self.world.cars[0]
-        speed_kmh = abs(car.speed) * 0.18
-        right_steering = max(0.0, car.steering_percent)
-        left_steering = max(0.0, -car.steering_percent)
+        speed_kmh = car.speed * 0.18
 
         panel_width = 278
-        panel_height = 317 if show_controls else 232
+        panel_height = 258
         panel_left = self.width - panel_width - 14
         panel_bottom = self.height - TOOLBAR_HEIGHT - panel_height - 14
         panel_top = panel_bottom + panel_height
@@ -1308,7 +1345,13 @@ class SimulationWindow(arcade.Window):
             (78, 96, 115),
             1,
         )
-        arcade.draw_lbwh_rectangle_filled(panel_left, panel_top - 4, panel_width, 4, (42, 177, 230))
+        arcade.draw_lbwh_rectangle_filled(
+            panel_left,
+            panel_top - 4,
+            panel_width,
+            4,
+            (42, 177, 230),
+        )
 
         self._set_hud_text("title", "VEHICLE STATUS", content_left, panel_top - 25)
         self._set_hud_text("speed", f"{speed_kmh:04.1f}", content_right - 47, panel_top - 65)
@@ -1328,53 +1371,48 @@ class SimulationWindow(arcade.Window):
             (42, 177, 230),
         )
 
-        self._set_hud_text("steering_title", "STEERING", content_left, panel_top - 118)
-        steering_center = panel_left + panel_width / 2
-        steering_y = panel_top - 143
-        half_steering_width = 105
-        arcade.draw_lbwh_rectangle_filled(
-            steering_center - half_steering_width,
-            steering_y,
-            half_steering_width * 2,
-            7,
-            (50, 61, 73),
+        lane_name = "UPPER" if car.lane_index == 1 else "LOWER"
+        target_lane_name = "LOWER" if car.lane_index == 1 else "UPPER"
+        lane_status = (
+            f"LANE  CHANGING TO {target_lane_name}"
+            if car.is_changing_lane
+            else f"LANE  {lane_name}"
         )
-        arcade.draw_lbwh_rectangle_filled(steering_center - 1, steering_y - 3, 2, 13, (210, 220, 230))
-        if left_steering:
-            fill = half_steering_width * left_steering / 100
-            arcade.draw_lbwh_rectangle_filled(
-                steering_center - fill, steering_y, fill, 7, (245, 170, 55)
-            )
-        if right_steering:
-            fill = half_steering_width * right_steering / 100
-            arcade.draw_lbwh_rectangle_filled(
-                steering_center, steering_y, fill, 7, (245, 170, 55)
-            )
+        self._set_hud_text("lane", lane_status, content_left, panel_top - 119)
         self._set_hud_text(
-            "steering_value",
-            f"LEFT {left_steering:.0f}%     {right_steering:.0f}% RIGHT",
-            steering_center,
-            panel_top - 162,
+            "changes",
+            (
+                f"LANE CHANGES  {self.world.lane_changes_used} / "
+                f"{self.world.max_spostamenti}"
+            ),
+            content_left,
+            panel_top - 145,
         )
-
-        brake_color = (230, 72, 72) if car.brake_active else (79, 196, 123)
-        arcade.draw_circle_filled(content_left + 6, panel_top - 185, 6, brake_color)
-        brake_status = "ACTIVE" if car.brake_active else "INACTIVE"
-        self._set_hud_text("brake", f"BRAKE  {brake_status}", content_left + 20, panel_top - 185)
-
-        danger = self.world.has_imminent_collision(seconds=2.0)
-        danger_color = (238, 68, 68) if danger else (79, 196, 123)
-        danger_text = "DANGER: COLLISION WITHIN 2s" if danger else "PATH CLEAR FOR 2s"
-        arcade.draw_circle_filled(content_left + 6, panel_top - 211, 6, danger_color)
-        self._set_hud_text("danger", danger_text, content_left + 20, panel_top - 211)
-
-        if show_controls:
-            separator_y = panel_top - 234
-            arcade.draw_line(content_left, separator_y, content_right, separator_y, (65, 78, 92), 1)
-            self._set_hud_text("controls_title", "CONTROLS", content_left, panel_top - 252)
-            self._set_hud_text("control_w", "W       accelerate", content_left, panel_top - 270)
-            self._set_hud_text("control_s", "S        brake", content_left, panel_top - 286)
-            self._set_hud_text("control_ad", "A / D   steer", content_left, panel_top - 302)
+        self._set_hud_text(
+            "vision",
+            f"VISION DISTANCE  {self.world.vision_distance:.0f} px",
+            content_left,
+            panel_top - 171,
+        )
+        self._set_hud_text(
+            "decision",
+            f"DECISION DISTANCE  {self.world.decision_distance:.0f} px",
+            content_left,
+            panel_top - 195,
+        )
+        last_action = self.last_decision.action if self.last_decision else "WAITING"
+        action_color = (
+            (245, 170, 55)
+            if last_action == CHANGE_LANE
+            else (79, 196, 123)
+        )
+        self._hud_texts["last_action"].color = action_color
+        self._set_hud_text(
+            "last_action",
+            f"LAST DECISION  {last_action}",
+            content_left,
+            panel_top - 226,
+        )
 
     def on_resize(self, width: int, height: int) -> None:
         super().on_resize(width, height)

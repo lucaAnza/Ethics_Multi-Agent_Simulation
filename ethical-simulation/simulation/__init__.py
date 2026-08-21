@@ -1,5 +1,5 @@
 """Core state and entities for the simulation."""
 
-from .world import World
+from .world import DecisionContext, World
 
-__all__ = ["World"]
+__all__ = ["DecisionContext", "World"]

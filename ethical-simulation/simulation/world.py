@@ -1,9 +1,10 @@
-"""World state, stepping, reset, and prototype rendering."""
+"""Simulation state, vehicle perception, collisions, and map rendering."""
 
-import math
+from __future__ import annotations
+
 from collections.abc import Mapping
-from dataclasses import replace
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Callable
 
 import arcade
 
@@ -11,8 +12,24 @@ from scenarios import create_scenario
 from simulation.entities import Car, Pedestrian
 
 
+@dataclass(frozen=True)
+class DecisionContext:
+    """A single incident and the only state exposed to an ethical framework."""
+
+    incident_entities: tuple[Pedestrian, ...]
+    state: dict[str, list[dict[str, Any]]]
+
+
 class World:
-    """Own simulation state; only ``draw`` depends on Arcade rendering."""
+    """Own all physical and perceptual state independently from ethical policy."""
+
+    ROAD_HALF_HEIGHT = 90.0
+    LANE_OFFSET = 45.0
+    LANE_HALF_WIDTH = 30.0
+    CAR_HALF_LENGTH = 38.0
+    CAR_HALF_WIDTH = 20.0
+    LANE_CHANGE_DURATION = 0.10
+    TUNNEL_MARGIN = 105.0
 
     def __init__(
         self,
@@ -29,49 +46,115 @@ class World:
         self.scenario_definitions = scenario_definitions
         self.cars: list[Car] = []
         self.pedestrians: list[Pedestrian] = []
-        self.framework_parameters: dict[str, dict[str, float]] = {}
+        self.vision_distance = 300.0
+        self.decision_distance = 120.0
+        self.max_spostamenti = 2
+        self.lane_changes_used = 0
+        self.reached_tunnel = False
+        self._handled_incident_ids: set[int] = set()
         self._label_texts: dict[int, arcade.Text] = {}
+        self._tunnel_text = arcade.Text(
+            "TUNNEL",
+            0,
+            0,
+            (225, 231, 236),
+            10,
+            anchor_x="center",
+            anchor_y="center",
+            bold=True,
+        )
+        self._other_lane_vision_text = arcade.Text(
+            "ADJACENT LANE VISION",
+            0,
+            0,
+            (116, 202, 240, 220),
+            8,
+            anchor_x="left",
+            anchor_y="center",
+            bold=True,
+        )
         self.reset(scenario)
 
     @property
     def road_y(self) -> float:
         return max(190.0, (self.height - 72) * 0.48)
 
+    @property
+    def lane_centers(self) -> tuple[float, float]:
+        return self.road_y - self.LANE_OFFSET, self.road_y + self.LANE_OFFSET
+
+    @property
+    def tunnel_x(self) -> float:
+        return self.width - self.TUNNEL_MARGIN
+
+    @property
+    def primary_car(self) -> Car | None:
+        return self.cars[0] if self.cars else None
+
+    @property
+    def lane_changes_remaining(self) -> int:
+        return max(0, self.max_spostamenti - self.lane_changes_used)
+
+    def configure_vehicle(
+        self,
+        *,
+        vision_distance: float | None = None,
+        decision_distance: float | None = None,
+        max_spostamenti: int | None = None,
+    ) -> None:
+        """Update simulation-owned perception and lane-change limits."""
+        if vision_distance is not None:
+            self.vision_distance = max(50.0, float(vision_distance))
+        if decision_distance is not None:
+            self.decision_distance = max(10.0, float(decision_distance))
+        self.decision_distance = min(self.decision_distance, self.vision_distance)
+        if max_spostamenti is not None:
+            self.max_spostamenti = max(
+                self.lane_changes_used,
+                0,
+                int(max_spostamenti),
+            )
+
     def update(self, delta_time: float) -> bool:
-        """Advance automatic cars and report whether one touched a boundary."""
-        boundary_hit = False
+        """Advance the world and return true only when the primary car enters the tunnel."""
+        if self.reached_tunnel:
+            return True
+
         for car in self.cars:
             car.update(delta_time)
-            boundary_hit = self._keep_car_in_world(car) or boundary_hit
+        for index, car in enumerate(self.cars):
+            if car.x + self.CAR_HALF_LENGTH >= self.tunnel_x:
+                car.x = self.tunnel_x - self.CAR_HALF_LENGTH
+                car.speed = 0.0
+                if index == 0:
+                    self.reached_tunnel = True
+
         self._update_pedestrians(delta_time)
         for car in self.cars:
             self._check_pedestrian_collisions(car)
-        return boundary_hit
+        return self.reached_tunnel
 
-    def update_free_drive(
-        self,
-        delta_time: float,
-        throttle: bool,
-        brake: bool,
-        steering: float,
-    ) -> bool:
-        """Update the player-controlled car in Scenario Free."""
-        if not self.cars:
+    def request_lane_change(self) -> bool:
+        """Start the sole vehicle intervention if one is still available."""
+        car = self.primary_car
+        if (
+            car is None
+            or car.is_changing_lane
+            or self.lane_changes_used >= self.max_spostamenti
+            or self.reached_tunnel
+        ):
             return False
-
-        car = self.cars[0]
-        car.update_driving(delta_time, throttle, brake, steering)
-        boundary_hit = self._keep_car_in_world(car)
-        for automatic_car in self.cars[1:]:
-            automatic_car.update(delta_time)
-            boundary_hit = self._keep_car_in_world(automatic_car) or boundary_hit
-        self._update_pedestrians(delta_time)
-        for current_car in self.cars:
-            self._check_pedestrian_collisions(current_car)
-        return boundary_hit
+        target_lane = 1 - car.lane_index
+        if not car.start_lane_change(
+            target_lane,
+            self.lane_centers[target_lane],
+            self.LANE_CHANGE_DURATION,
+        ):
+            return False
+        self.lane_changes_used += 1
+        return True
 
     def _update_pedestrians(self, delta_time: float) -> None:
-        """Advance living pedestrians and keep them inside the visible map."""
         playable_top = self.height - 72 - 12
         for pedestrian in self.pedestrians:
             pedestrian.update(delta_time)
@@ -84,249 +167,110 @@ class World:
             if touched_boundary and pedestrian.action == "random_move":
                 pedestrian.redirect_random_movement()
 
-    def stop_free_drive_controls(self) -> None:
-        if self.cars:
-            self.cars[0].brake_active = False
-            self.cars[0].steering_percent = 0.0
+    def _check_pedestrian_collisions(self, car: Car) -> None:
+        for pedestrian in self.pedestrians:
+            if pedestrian.alive and self._car_overlaps_pedestrian(car, pedestrian):
+                pedestrian.alive = False
 
-    def all_cars_stopped(self, speed_threshold: float = 0.01) -> bool:
-        """Return true when every car in the world is effectively stationary."""
-        return bool(self.cars) and all(
-            abs(car.speed) <= speed_threshold for car in self.cars
+    @classmethod
+    def _car_overlaps_pedestrian(cls, car: Car, pedestrian: Pedestrian) -> bool:
+        return (
+            abs(pedestrian.x - car.x) <= cls.CAR_HALF_LENGTH + 10.0
+            and abs(pedestrian.y - car.y) <= cls.CAR_HALF_WIDTH + 10.0
         )
 
     def dead_pedestrians(self) -> list[Pedestrian]:
         return [pedestrian for pedestrian in self.pedestrians if not pedestrian.alive]
 
-    def _keep_car_in_world(self, car: Car) -> bool:
-        playable_top = self.height - 72 - 24
-        bounded_x = min(max(car.x, 40.0), self.width - 40.0)
-        bounded_y = min(max(car.y, 30.0), playable_top)
-        boundary_hit = (
-            car.x <= 40.0
-            or car.x >= self.width - 40.0
-            or car.y <= 30.0
-            or car.y >= playable_top
-        )
-        if boundary_hit:
-            car.speed = 0.0
-        car.x, car.y = bounded_x, bounded_y
-        return boundary_hit
+    def _lane_for_y(self, y: float) -> int | None:
+        distances = [abs(y - center) for center in self.lane_centers]
+        closest_lane = min(range(2), key=distances.__getitem__)
+        return closest_lane if distances[closest_lane] <= self.LANE_HALF_WIDTH else None
 
-    def _check_pedestrian_collisions(self, car: Car) -> None:
-        """Mark every living pedestrian touched by the car as dead."""
+    def _distance_ahead(self, pedestrian: Pedestrian) -> float:
+        car = self.primary_car
+        if car is None:
+            return float("inf")
+        return pedestrian.x - (car.x + self.CAR_HALF_LENGTH)
+
+    def visible_lane_entities(self) -> tuple[list[Pedestrian], list[Pedestrian]]:
+        """Return visible living pedestrians in current and adjacent lanes."""
+        car = self.primary_car
+        if car is None:
+            return [], []
+        by_lane: dict[int, list[Pedestrian]] = {0: [], 1: []}
         for pedestrian in self.pedestrians:
-            if pedestrian.alive and self._car_overlaps_pedestrian(car, pedestrian):
-                pedestrian.alive = False
+            distance = self._distance_ahead(pedestrian)
+            lane = self._lane_for_y(pedestrian.y)
+            if (
+                pedestrian.alive
+                and lane is not None
+                and 0.0 <= distance <= self.vision_distance
+            ):
+                by_lane[lane].append(pedestrian)
+        for entities in by_lane.values():
+            entities.sort(key=self._distance_ahead)
+        return by_lane[car.lane_index], by_lane[1 - car.lane_index]
+
+    def next_incident_distance(self) -> float | None:
+        current_entities, _other_entities = self.visible_lane_entities()
+        if not current_entities:
+            return None
+        return self._distance_ahead(current_entities[0])
 
     @staticmethod
-    def _car_overlaps_pedestrian(car: Car, pedestrian: Pedestrian) -> bool:
-        heading = math.radians(car.heading)
-        forward_x, forward_y = math.cos(heading), math.sin(heading)
-        side_x, side_y = -forward_y, forward_x
-        relative_x = pedestrian.x - car.x
-        relative_y = pedestrian.y - car.y
-        longitudinal = relative_x * forward_x + relative_y * forward_y
-        lateral = relative_x * side_x + relative_y * side_y
-        return abs(longitudinal) <= 48 and abs(lateral) <= 30
-
-    def predict_action_outcomes(
-        self,
-        seconds: float = 2.0,
-        time_step: float = 0.05,
-    ) -> dict[str, list[Pedestrian]]:
-        """Simulate three emergency actions without changing the real world."""
-        if not self.cars:
-            return {}
-
-        _stop_time, stop_distance = self.braking_metrics()
-        outcomes: dict[str, list[Pedestrian]] = {
-            "Brake only": self._casualties_in_straight_corridor(stop_distance)
-        }
-        steps = max(1, math.ceil(seconds / time_step))
-
-        for action_name, steering in (
-            ("Maximum right steer", 1.0),
-            ("Maximum left steer", -1.0),
-        ):
-            simulated_car = replace(self.cars[0])
-            casualties: list[Pedestrian] = []
-            casualty_ids: set[int] = set()
-
-            for _ in range(steps):
-                self._advance_prediction_car(simulated_car, time_step, steering)
-                self._keep_car_in_world(simulated_car)
-                for pedestrian in self.pedestrians:
-                    if (
-                        pedestrian.alive
-                        and id(pedestrian) not in casualty_ids
-                        and self._car_overlaps_pedestrian(simulated_car, pedestrian)
-                    ):
-                        casualties.append(pedestrian)
-                        casualty_ids.add(id(pedestrian))
-
-            outcomes[action_name] = casualties
-
-        return outcomes
-
-    def build_ethical_decision_state(self, seconds: float = 2.0) -> dict:
-        """Build four comparable alternatives for an ethical framework."""
-        predicted = self.predict_action_outcomes(seconds=seconds)
-        alternatives = [
-            {
-                "action": "continue",
-                "casualties": self._serialize_casualties(
-                    self.predict_current_course_casualties(seconds)
-                ),
-            },
-            {
-                "action": "steer_right",
-                "casualties": self._serialize_casualties(
-                    predicted.get("Maximum right steer", [])
-                ),
-            },
-            {
-                "action": "steer_left",
-                "casualties": self._serialize_casualties(
-                    predicted.get("Maximum left steer", [])
-                ),
-            },
-            {
-                "action": "brake",
-                "casualties": self._serialize_casualties(
-                    predicted.get("Brake only", [])
-                ),
-            },
-        ]
-        return {"horizon_seconds": seconds, "alternatives": alternatives}
-
-    @staticmethod
-    def _serialize_casualties(casualties: list[Pedestrian]) -> list[dict[str, str | None]]:
+    def _serialize_entities(
+        entities: list[Pedestrian],
+        distance_getter: Callable[[Pedestrian], float],
+    ) -> list[dict[str, Any]]:
         return [
-            {"model": pedestrian.model, "label": pedestrian.label}
-            for pedestrian in casualties
+            {
+                "model": entity.model,
+                "label": entity.label,
+                "distance": round(max(0.0, distance_getter(entity)), 2),
+            }
+            for entity in entities
         ]
 
-    def update_decision_action(self, delta_time: float, action: str) -> bool:
-        """Apply a temporary command selected by an ethical framework."""
-        if not self.cars:
-            return False
+    def next_decision_context(self) -> DecisionContext | None:
+        """Return an unhandled incident once it reaches decision distance."""
+        car = self.primary_car
+        if car is None or car.is_changing_lane or self.reached_tunnel:
+            return None
+        current_entities, other_entities = self.visible_lane_entities()
+        triggering_entities = tuple(
+            entity
+            for entity in current_entities
+            if self._distance_ahead(entity) <= self.decision_distance
+            and id(entity) not in self._handled_incident_ids
+        )
+        if not triggering_entities:
+            return None
 
-        car = self.cars[0]
-        if action == "brake":
-            car.update_driving(
-                delta_time,
-                throttle=False,
-                brake=True,
-                steering=0.0,
-            )
-        else:
-            steering = 1.0 if action == "steer_right" else -1.0
-            car.brake_active = False
-            car.steering_percent = steering * 100.0
-            self._advance_prediction_car(car, delta_time, steering)
-
-        boundary_hit = self._keep_car_in_world(car)
-        for automatic_car in self.cars[1:]:
-            automatic_car.update(delta_time)
-            boundary_hit = self._keep_car_in_world(automatic_car) or boundary_hit
-        self._update_pedestrians(delta_time)
-        for current_car in self.cars:
-            self._check_pedestrian_collisions(current_car)
-        return boundary_hit
-
-    def braking_metrics(self, braking_deceleration: float = 260.0) -> tuple[float, float]:
-        """Return stopping time and distance for the current car."""
-        if not self.cars:
-            return 0.0, 0.0
-        speed = abs(self.cars[0].speed * self.cars[0].direction)
-        stop_time = speed / braking_deceleration
-        stop_distance = speed * stop_time - 0.5 * braking_deceleration * stop_time**2
-        return stop_time, stop_distance
-
-    def _casualties_in_straight_corridor(self, distance: float) -> list[Pedestrian]:
-        if not self.cars or distance <= 0:
-            return []
-        car = self.cars[0]
-        return [
-            pedestrian
-            for pedestrian in self.pedestrians
-            if pedestrian.alive
-            and self._pedestrian_in_projected_corridor(car, pedestrian, distance)
-        ]
-
-    @staticmethod
-    def _advance_prediction_car(
-        car: Car,
-        delta_time: float,
-        steering: float,
-    ) -> None:
-        """Advance a cloned car with constant speed and hypothetical steering."""
-        if abs(car.speed) > 1.0:
-            reverse_direction = -1.0 if car.speed < 0 else 1.0
-            car.heading -= steering * 105.0 * reverse_direction * delta_time
-
-        heading = math.radians(car.heading)
-        car.x += math.cos(heading) * car.speed * car.direction * delta_time
-        car.y += math.sin(heading) * car.speed * car.direction * delta_time
-
-    def has_imminent_collision(self, seconds: float = 2.0) -> bool:
-        """Return whether the current trajectory reaches a pedestrian soon."""
-        return any(
-            self._car_will_hit_pedestrian(car, pedestrian, seconds)
-            for car in self.cars
-            for pedestrian in self.pedestrians
-            if pedestrian.alive
+        # Both lanes inside the decision zone belong to the same incident. This
+        # prevents an immediate second decision about the same local situation
+        # after the car has completed a lane change.
+        incident_entities = tuple(
+            entity
+            for entity in (*current_entities, *other_entities)
+            if self._distance_ahead(entity) <= self.decision_distance
+        )
+        return DecisionContext(
+            incident_entities=incident_entities,
+            state={
+                "current_lane_entities": self._serialize_entities(
+                    current_entities,
+                    self._distance_ahead,
+                ),
+                "other_lane_entities": self._serialize_entities(
+                    other_entities,
+                    self._distance_ahead,
+                ),
+            },
         )
 
-    def predict_current_course_casualties(
-        self,
-        seconds: float = 2.0,
-    ) -> list[Pedestrian]:
-        """List living pedestrians hit if speed and heading remain unchanged."""
-        if not self.cars:
-            return []
-        travel_distance = abs(self.cars[0].speed * self.cars[0].direction) * seconds
-        return self._casualties_in_straight_corridor(travel_distance)
-
-    @staticmethod
-    def _car_will_hit_pedestrian(
-        car: Car,
-        pedestrian: Pedestrian,
-        seconds: float,
-    ) -> bool:
-        travel_distance = abs(car.speed * car.direction) * seconds
-        return World._pedestrian_in_projected_corridor(car, pedestrian, travel_distance)
-
-    @staticmethod
-    def _pedestrian_in_projected_corridor(
-        car: Car,
-        pedestrian: Pedestrian,
-        travel_distance: float,
-    ) -> bool:
-        if travel_distance <= 0:
-            return False
-
-        movement_speed = car.speed * car.direction
-        heading = math.radians(car.heading)
-        if movement_speed < 0:
-            heading += math.pi
-        forward_x, forward_y = math.cos(heading), math.sin(heading)
-        side_x, side_y = -forward_y, forward_x
-
-        front_x = car.x + forward_x * 38
-        front_y = car.y + forward_y * 38
-        relative_x = pedestrian.x - front_x
-        relative_y = pedestrian.y - front_y
-        longitudinal = relative_x * forward_x + relative_y * forward_y
-        lateral = relative_x * side_x + relative_y * side_y
-
-        pedestrian_radius = 10
-        corridor_half_width = 20 + pedestrian_radius
-        return (
-            -pedestrian_radius <= longitudinal <= travel_distance + pedestrian_radius
-            and abs(lateral) <= corridor_half_width
-        )
+    def mark_decision_handled(self, context: DecisionContext) -> None:
+        self._handled_incident_ids.update(id(entity) for entity in context.incident_entities)
 
     def reset(self, scenario: str | None = None) -> None:
         if scenario is not None:
@@ -338,98 +282,227 @@ class World:
         )
         self.cars = initial.cars
         self.pedestrians = initial.pedestrians
+        for car in self.cars:
+            car.lane_index = 1 if car.y >= self.road_y else 0
+            car.y = self.lane_centers[car.lane_index]
+        self.lane_changes_used = 0
+        self.reached_tunnel = False
+        self._handled_incident_ids.clear()
         self._label_texts.clear()
 
     def set_scenario_definitions(
         self,
         definitions: Mapping[str, Mapping[str, list[dict[str, Any]]]],
     ) -> None:
-        """Replace the catalog used by future resets."""
         self.scenario_definitions = definitions
 
     def resize(self, width: int, height: int) -> None:
         old_road_y = self.road_y
         self.width, self.height = width, height
         shift = self.road_y - old_road_y
-        for entity in [*self.cars, *self.pedestrians]:
-            entity.y += shift
+        for pedestrian in self.pedestrians:
+            pedestrian.y += shift
+        for car in self.cars:
+            car.y += shift
+            car.shift_lane_change_y(shift)
 
-    def draw(self) -> None:
-        arcade.draw_lbwh_rectangle_filled(0, 0, self.width, self.height, (91, 145, 79))
-
-        road_bottom = self.road_y - 90
-        arcade.draw_lbwh_rectangle_filled(0, road_bottom, self.width, 180, (55, 58, 62))
-        arcade.draw_line(0, road_bottom + 10, self.width, road_bottom + 10, (235, 235, 220), 4)
-        arcade.draw_line(0, road_bottom + 170, self.width, road_bottom + 170, (235, 235, 220), 4)
-        for x in range(-20, self.width + 80, 110):
-            arcade.draw_lbwh_rectangle_filled(x, self.road_y - 3, 65, 6, (245, 205, 65))
+    def draw(self, *, show_vehicle_vision: bool = True) -> None:
+        arcade.draw_lbwh_rectangle_filled(
+            0,
+            0,
+            self.width,
+            self.height,
+            (87, 143, 78),
+        )
+        road_bottom = self.road_y - self.ROAD_HALF_HEIGHT
+        arcade.draw_lbwh_rectangle_filled(
+            0,
+            road_bottom,
+            self.width,
+            self.ROAD_HALF_HEIGHT * 2,
+            (53, 57, 62),
+        )
+        arcade.draw_line(
+            0,
+            road_bottom + 10,
+            self.width,
+            road_bottom + 10,
+            (235, 235, 220),
+            4,
+        )
+        arcade.draw_line(
+            0,
+            road_bottom + self.ROAD_HALF_HEIGHT * 2 - 10,
+            self.width,
+            road_bottom + self.ROAD_HALF_HEIGHT * 2 - 10,
+            (235, 235, 220),
+            4,
+        )
+        for x in range(-20, int(self.tunnel_x) + 80, 110):
+            arcade.draw_lbwh_rectangle_filled(
+                x,
+                self.road_y - 3,
+                65,
+                6,
+                (245, 205, 65),
+            )
 
         self._draw_environment()
-        for car in self.cars:
-            self._draw_trajectory(car)
+        if show_vehicle_vision and self.primary_car is not None:
+            self._draw_vehicle_vision(self.primary_car)
         for car in self.cars:
             self._draw_car(car)
         for pedestrian in self.pedestrians:
             self._draw_pedestrian(pedestrian)
+        self._draw_tunnel()
 
     def _draw_environment(self) -> None:
-        for x in (95, 280, self.width - 105):
-            arcade.draw_lbwh_rectangle_filled(x - 7, self.road_y + 135, 14, 35, (105, 72, 45))
-            arcade.draw_circle_filled(x, self.road_y + 180, 31, (31, 105, 50))
-        arcade.draw_lbwh_rectangle_filled(390, self.road_y + 115, 150, 105, (194, 154, 112))
-        arcade.draw_lbwh_rectangle_filled(415, self.road_y + 145, 30, 40, (90, 145, 183))
-        arcade.draw_lbwh_rectangle_filled(475, self.road_y + 145, 30, 40, (90, 145, 183))
+        usable_right = max(200.0, self.tunnel_x - 55.0)
+        tree_positions = (90.0, 285.0, 520.0, 755.0)
+        for index, x in enumerate(tree_positions):
+            if x >= usable_right:
+                continue
+            y = self.road_y + (150 if index % 2 == 0 else 185)
+            arcade.draw_lbwh_rectangle_filled(x - 6, y - 35, 12, 38, (105, 72, 45))
+            arcade.draw_circle_filled(x, y + 14, 27, (31, 103, 50))
+            arcade.draw_circle_filled(x - 16, y + 5, 18, (39, 122, 57))
+            arcade.draw_circle_filled(x + 16, y + 6, 19, (36, 116, 53))
 
-    def _draw_trajectory(self, car: Car, seconds: float = 2.0) -> None:
-        """Draw the two dashed boundaries of the car's projected path."""
-        movement_speed = car.speed * car.direction
-        heading = math.radians(car.heading)
-        if movement_speed < 0:
-            heading += math.pi
+        for x in range(55, int(usable_right), 115):
+            lower_y = self.road_y - 135 - (x // 115 % 2) * 24
+            arcade.draw_circle_filled(x, lower_y, 13, (38, 112, 52))
+            arcade.draw_circle_filled(x + 12, lower_y + 2, 10, (45, 128, 60))
+            flower_color = (245, 206, 66) if (x // 115) % 2 else (235, 105, 135)
+            arcade.draw_circle_filled(x - 18, lower_y - 3, 3, flower_color)
+            arcade.draw_circle_filled(x + 27, lower_y + 8, 3, flower_color)
 
-        forward_x, forward_y = math.cos(heading), math.sin(heading)
-        side_x, side_y = -forward_y, forward_x
-        start_x = car.x + forward_x * 42
-        start_y = car.y + forward_y * 42
-        projected_length = abs(movement_speed) * seconds
-        visible_length = max(55.0, projected_length)
-        danger = self.has_imminent_collision(seconds)
-        color = (245, 75, 75, 220) if danger else (80, 210, 245, 190)
-
-        dash_length = 18.0
-        dash_stride = 30.0
-        for side in (-22.0, 22.0):
-            offset_x, offset_y = side_x * side, side_y * side
-            distance = 0.0
-            while distance < visible_length:
-                dash_end = min(distance + dash_length, visible_length)
-                arcade.draw_line(
-                    start_x + offset_x + forward_x * distance,
-                    start_y + offset_y + forward_y * distance,
-                    start_x + offset_x + forward_x * dash_end,
-                    start_y + offset_y + forward_y * dash_end,
-                    color,
-                    2,
+        if 540 < usable_right:
+            arcade.draw_lbwh_rectangle_filled(
+                382,
+                self.road_y + 118,
+                148,
+                96,
+                (194, 154, 112),
+            )
+            arcade.draw_polygon_filled(
+                [
+                    (370, self.road_y + 214),
+                    (456, self.road_y + 260),
+                    (542, self.road_y + 214),
+                ],
+                (126, 70, 55),
+            )
+            for window_x in (408, 474):
+                arcade.draw_lbwh_rectangle_filled(
+                    window_x,
+                    self.road_y + 150,
+                    27,
+                    36,
+                    (91, 151, 190),
                 )
-                distance += dash_stride
+
+    def _draw_tunnel(self) -> None:
+        road_bottom = self.road_y - self.ROAD_HALF_HEIGHT
+        facade_left = self.tunnel_x - 18
+        arcade.draw_lbwh_rectangle_filled(
+            facade_left,
+            road_bottom - 24,
+            self.width - facade_left,
+            self.ROAD_HALF_HEIGHT * 2 + 48,
+            (83, 88, 92),
+        )
+        for y in range(int(road_bottom - 18), int(road_bottom + 205), 28):
+            arcade.draw_line(
+                facade_left,
+                y,
+                self.width,
+                y,
+                (104, 109, 113),
+                1,
+            )
+        arcade.draw_lbwh_rectangle_filled(
+            self.tunnel_x + 6,
+            road_bottom + 6,
+            self.width - self.tunnel_x,
+            self.ROAD_HALF_HEIGHT * 2 - 12,
+            (15, 18, 22),
+        )
+        arcade.draw_lbwh_rectangle_filled(
+            self.tunnel_x - 8,
+            road_bottom - 6,
+            14,
+            self.ROAD_HALF_HEIGHT * 2 + 12,
+            (132, 137, 140),
+        )
+        arcade.draw_line(
+            self.tunnel_x - 1,
+            road_bottom + 2,
+            self.tunnel_x - 1,
+            road_bottom + self.ROAD_HALF_HEIGHT * 2 - 2,
+            (183, 188, 190),
+            2,
+        )
+        self._tunnel_text.x = self.tunnel_x + 43
+        self._tunnel_text.y = road_bottom + self.ROAD_HALF_HEIGHT * 2 + 11
+        self._tunnel_text.draw()
+
+    @staticmethod
+    def _draw_dashed_horizontal(
+        start_x: float,
+        end_x: float,
+        y: float,
+        color,
+        width: float = 2.0,
+    ) -> None:
+        x = start_x
+        while x < end_x:
+            arcade.draw_line(x, y, min(x + 18.0, end_x), y, color, width)
+            x += 30.0
+
+    def _draw_vehicle_vision(self, car: Car) -> None:
+        start_x = car.x + self.CAR_HALF_LENGTH + 4.0
+        end_x = min(start_x + self.vision_distance, self.tunnel_x)
+        if end_x <= start_x:
+            return
+        vision_color = (80, 210, 245, 205)
+        for y in (car.y - self.LANE_HALF_WIDTH, car.y + self.LANE_HALF_WIDTH):
+            self._draw_dashed_horizontal(start_x, end_x, y, vision_color)
+
+        other_lane_y = self.lane_centers[1 - car.lane_index]
+        arcade.draw_lbwh_rectangle_filled(
+            start_x,
+            other_lane_y - self.LANE_HALF_WIDTH,
+            end_x - start_x,
+            self.LANE_HALF_WIDTH * 2,
+            (47, 150, 205, 42),
+        )
+        for y in (
+            other_lane_y - self.LANE_HALF_WIDTH,
+            other_lane_y + self.LANE_HALF_WIDTH,
+        ):
+            self._draw_dashed_horizontal(start_x, end_x, y, (77, 178, 230, 150), 1.5)
+        self._other_lane_vision_text.x = start_x + 10
+        self._other_lane_vision_text.y = other_lane_y
+        self._other_lane_vision_text.draw()
 
     @staticmethod
     def _draw_car(car: Car) -> None:
-        angle = math.radians(car.heading)
-        cosine, sine = math.cos(angle), math.sin(angle)
-
-        def rotated(local_x: float, local_y: float) -> tuple[float, float]:
-            return (
-                car.x + local_x * cosine - local_y * sine,
-                car.y + local_x * sine + local_y * cosine,
-            )
-
-        body = [rotated(-38, -20), rotated(38, -20), rotated(38, 20), rotated(-38, 20)]
-        windshield = [rotated(3, -15), rotated(22, -12), rotated(22, 12), rotated(3, 15)]
+        body = [
+            (car.x - 38, car.y - 20),
+            (car.x + 38, car.y - 20),
+            (car.x + 38, car.y + 20),
+            (car.x - 38, car.y + 20),
+        ]
+        windshield = [
+            (car.x + 3, car.y - 15),
+            (car.x + 22, car.y - 12),
+            (car.x + 22, car.y + 12),
+            (car.x + 3, car.y + 15),
+        ]
         arcade.draw_polygon_filled(body, (195, 45, 48))
         arcade.draw_polygon_filled(windshield, (155, 210, 225))
-        arcade.draw_circle_filled(*rotated(31, -11), 4, (255, 240, 155))
-        arcade.draw_circle_filled(*rotated(31, 11), 4, (255, 240, 155))
+        arcade.draw_circle_filled(car.x + 31, car.y - 11, 4, (255, 240, 155))
+        arcade.draw_circle_filled(car.x + 31, car.y + 11, 4, (255, 240, 155))
 
     def _draw_pedestrian(self, person: Pedestrian) -> None:
         if not person.alive:
@@ -484,23 +557,64 @@ class World:
             )
 
         leg_color = (35, 35, 40)
-        arcade.draw_line(person.x, person.y - 15 * scale, person.x - 9 * scale, person.y - 31 * scale, leg_color, 4)
-        arcade.draw_line(person.x, person.y - 15 * scale, person.x + 9 * scale, person.y - 31 * scale, leg_color, 4)
+        arcade.draw_line(
+            person.x,
+            person.y - 15 * scale,
+            person.x - 9 * scale,
+            person.y - 31 * scale,
+            leg_color,
+            4,
+        )
+        arcade.draw_line(
+            person.x,
+            person.y - 15 * scale,
+            person.x + 9 * scale,
+            person.y - 31 * scale,
+            leg_color,
+            4,
+        )
 
         if is_old:
             cane_x = person.x + 14
-            arcade.draw_line(cane_x, person.y + 1, cane_x, person.y - 29, (110, 70, 35), 3)
-            arcade.draw_line(cane_x, person.y + 1, cane_x - 5, person.y + 5, (110, 70, 35), 3)
+            arcade.draw_line(
+                cane_x,
+                person.y + 1,
+                cane_x,
+                person.y - 29,
+                (110, 70, 35),
+                3,
+            )
+            arcade.draw_line(
+                cane_x,
+                person.y + 1,
+                cane_x - 5,
+                person.y + 5,
+                (110, 70, 35),
+                3,
+            )
 
         self._draw_pedestrian_label(person, person.y + (38 if is_child else 44))
 
     def _draw_dead_pedestrian(self, person: Pedestrian) -> None:
-        """Draw a high-contrast white body and skull for a dead pedestrian."""
         white = (250, 250, 250)
         skull_x = person.x + 25
         arcade.draw_line(person.x - 18, person.y, person.x + 15, person.y, white, 9)
-        arcade.draw_line(person.x - 8, person.y, person.x - 19, person.y - 10, white, 5)
-        arcade.draw_line(person.x + 5, person.y, person.x + 15, person.y - 11, white, 5)
+        arcade.draw_line(
+            person.x - 8,
+            person.y,
+            person.x - 19,
+            person.y - 10,
+            white,
+            5,
+        )
+        arcade.draw_line(
+            person.x + 5,
+            person.y,
+            person.x + 15,
+            person.y - 11,
+            white,
+            5,
+        )
         arcade.draw_circle_filled(skull_x, person.y, 11, white)
         arcade.draw_lbwh_rectangle_filled(skull_x - 7, person.y - 10, 14, 8, white)
         arcade.draw_circle_filled(skull_x - 4, person.y + 2, 2.5, (25, 25, 28))
@@ -514,26 +628,34 @@ class World:
             person.y - 5,
             (25, 25, 28),
         )
-        arcade.draw_line(skull_x - 5, person.y - 7, skull_x + 5, person.y - 7, (25, 25, 28), 1)
+        arcade.draw_line(
+            skull_x - 5,
+            person.y - 7,
+            skull_x + 5,
+            person.y - 7,
+            (25, 25, 28),
+            1,
+        )
         self._draw_pedestrian_label(person, person.y + 22)
 
     def _draw_pedestrian_label(self, person: Pedestrian, y: float) -> None:
-        if person.label:
-            cache_key = id(person)
-            label = self._label_texts.get(cache_key)
-            if label is None:
-                label = arcade.Text(
-                    person.label,
-                    person.x,
-                    y,
-                    (255, 255, 255),
-                    9,
-                    anchor_x="center",
-                    anchor_y="bottom",
-                )
-                self._label_texts[cache_key] = label
-            else:
-                label.text = person.label
-                label.x = person.x
-                label.y = y
-            label.draw()
+        if not person.label:
+            return
+        cache_key = id(person)
+        label = self._label_texts.get(cache_key)
+        if label is None:
+            label = arcade.Text(
+                person.label,
+                person.x,
+                y,
+                (255, 255, 255),
+                9,
+                anchor_x="center",
+                anchor_y="bottom",
+            )
+            self._label_texts[cache_key] = label
+        else:
+            label.text = person.label
+            label.x = person.x
+            label.y = y
+        label.draw()
