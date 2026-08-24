@@ -111,8 +111,8 @@ def validate_scenario_definitions(
             if not isinstance(raw_car, Mapping):
                 raise ValueError(f"{raw_name}.cars[{index}] must be an object")
             speed = _finite_number(raw_car.get("speed", 50.0), "speed")
-            if speed <= 0:
-                raise ValueError("car speed must be greater than zero")
+            if speed < 0:
+                raise ValueError("car speed cannot be negative")
             cars.append(
                 {
                     "x": _finite_number(raw_car.get("x"), "x"),

@@ -286,14 +286,14 @@ class SimulationWindow(arcade.Window):
                 min_value=0.25,
                 max_value=2.0,
                 step=0.25,
-                width=75,
+                width=55,
                 height=26,
             )
         )
         for label, handler, width in (
             (">", self._play, 34),
             ("||", self._pause, 34),
-            ("[]", self._stop, 34),
+            ("Reset", self._stop, 52),
         ):
             button = playback_controls.add(
                 arcade.gui.UIFlatButton(text=label, width=width, height=34)
@@ -311,8 +311,8 @@ class SimulationWindow(arcade.Window):
         self.initial_speed_slider = vehicle_controls.add(
             arcade.gui.UISlider(
                 value=initial_kmh,
-                min_value=5,
-                max_value=50,
+                min_value=0,
+                max_value=200,
                 step=1,
                 width=48,
                 height=26,
@@ -360,7 +360,7 @@ class SimulationWindow(arcade.Window):
             arcade.gui.UISlider(
                 value=self.max_spostamenti,
                 min_value=0,
-                max_value=5,
+                max_value=10,
                 step=1,
                 width=42,
                 height=26,
@@ -1092,7 +1092,7 @@ class SimulationWindow(arcade.Window):
             return value
 
         if entity_kind == "cars":
-            speed_kmh = number("speed_kmh", "Speed", minimum=0.1)
+            speed_kmh = number("speed_kmh", "Speed", minimum=0.0)
             if speed_kmh is None:
                 return False
             entity.update({"speed": speed_kmh})
@@ -1938,7 +1938,7 @@ class SimulationWindow(arcade.Window):
 
         speed_bar_y = panel_top - 93
         speed_bar_width = panel_width - 36
-        speed_ratio = min(speed_kmh / 50.0, 1.0)
+        speed_ratio = min(speed_kmh / 200.0, 1.0)
         arcade.draw_lbwh_rectangle_filled(
             content_left, speed_bar_y, speed_bar_width, 8, (50, 61, 73)
         )

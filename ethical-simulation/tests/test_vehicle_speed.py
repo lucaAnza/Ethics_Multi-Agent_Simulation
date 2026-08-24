@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from scenarios.scenarios import validate_scenario_definitions
 from simulation.entities import Car
 from simulation.units import (
     VEHICLE_PIXELS_PER_SECOND_PER_KMH,
@@ -24,6 +25,23 @@ class VehicleSpeedTests(unittest.TestCase):
         car = Car(x=0.0, y=0.0, speed=37.5)
         car.update(0.5)
         self.assertEqual(37.5, car.speed)
+
+    def test_scenario_accepts_a_stopped_car(self) -> None:
+        scenarios = validate_scenario_definitions(
+            {
+                "Stopped": {
+                    "cars": [
+                        {
+                            "x": 100.0,
+                            "y_offset": -45.0,
+                            "speed": 0.0,
+                        }
+                    ],
+                    "pedestrians": [],
+                }
+            }
+        )
+        self.assertEqual(0.0, scenarios["Stopped"]["cars"][0]["speed"])
 
 
 if __name__ == "__main__":
