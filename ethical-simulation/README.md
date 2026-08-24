@@ -69,6 +69,12 @@ of both visible lanes, the applied action, its reason, and optional
 framework-specific details such as a Kant rule or Constant conflict resolver.
 The report can return to the summary or restart the simulation directly.
 
+## Log file
+
+The application does not print simulation events to the terminal. Decision
+summaries, LLM prompts, raw responses, fallbacks, and scenario-loading errors are
+appended to `logs/simulation.log`. Runtime log files are excluded from Git.
+
 ## Settings
 
 The **Menu** opens framework, scenario, general, and project-info screens.

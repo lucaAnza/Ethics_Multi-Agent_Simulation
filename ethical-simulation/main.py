@@ -9,6 +9,7 @@ import arcade
 import arcade.gui
 from dotenv import load_dotenv
 
+from app_logging import application_logger
 from decision_engine import (
     DRIVING,
     EXECUTING_DECISION,
@@ -545,6 +546,10 @@ class SimulationWindow(arcade.Window):
                     self.current_framework,
                     context,
                     decision,
+                    llm_request=(
+                        f"Unable to build {self.current_framework} LLM request."
+                    ),
+                    llm_response=f"ERROR: {error_message}",
                 )
                 return
             if started:
@@ -596,6 +601,8 @@ class SimulationWindow(arcade.Window):
             result.framework_name,
             result.context,
             result.decision,
+            llm_request=result.llm_request,
+            llm_response=result.llm_response,
         )
 
     def _apply_ethical_decision(
@@ -604,6 +611,9 @@ class SimulationWindow(arcade.Window):
         framework_name: str,
         context: EthicalDecisionContext,
         decision: EthicalDecision,
+        *,
+        llm_request: str | None = None,
+        llm_response: str | None = None,
     ) -> None:
         if decision.action not in {STAY, CHANGE_LANE}:
             decision = EthicalDecision(
@@ -640,21 +650,22 @@ class SimulationWindow(arcade.Window):
             EXECUTING_DECISION if lane_change_started else DRIVING
         )
 
-        print(f"\n[ETHICAL DECISION] Framework: {framework_name}")
-        print(f"  Implementation: {actual_decision.details.get('mode', CODE_MODE)}")
-        print(
-            "  Current lane entities: "
-            f"{len(context.current_lane_entities)}"
+        application_logger.log_decision(
+            framework=framework_name,
+            implementation=str(
+                actual_decision.details.get("mode", CODE_MODE)
+            ),
+            current_lane_count=len(context.current_lane_entities),
+            other_lane_count=len(context.other_lane_entities),
+            framework_action=decision.action,
+            applied_action=actual_decision.action,
+            reason=actual_decision.reason,
+            lane_change_blocked=(
+                decision.action == CHANGE_LANE and not lane_change_started
+            ),
+            llm_request=llm_request,
+            llm_response=llm_response,
         )
-        print(
-            "  Other lane entities: "
-            f"{len(context.other_lane_entities)}"
-        )
-        print(f"  Framework action: {decision.action}")
-        print(f"  Applied action: {actual_decision.action}")
-        print(f"  Reason: {actual_decision.reason}")
-        if decision.action == CHANGE_LANE and not lane_change_started:
-            print("  Lane change unavailable: max_spostamenti reached.")
 
     def _cancel_pending_decision(self) -> None:
         if hasattr(self, "llm_decision_engine"):

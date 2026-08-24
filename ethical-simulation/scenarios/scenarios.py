@@ -10,6 +10,8 @@ import math
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from app_logging import application_logger
+
 if TYPE_CHECKING:
     from simulation.entities import Car, Pedestrian
 
@@ -172,7 +174,9 @@ def load_scenario_definitions(
         definitions = payload.get("scenarios") if isinstance(payload, dict) else None
         return validate_scenario_definitions(definitions)
     except (OSError, json.JSONDecodeError, ValueError) as error:
-        print(f"[SCENARIO SETTINGS] Using defaults: {error}")
+        application_logger.log_message(
+            f"[SCENARIO SETTINGS] Using defaults: {error}"
+        )
         return validate_scenario_definitions(
             deepcopy(DEFAULT_SCENARIO_DEFINITIONS)
         )

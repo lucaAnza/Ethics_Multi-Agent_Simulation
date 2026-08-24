@@ -13,6 +13,7 @@ from llm.base_client import LLMClient
 from llm.errors import safe_error_message
 from llm.parser import parse_decision
 from llm.prompt_builder import PromptBuilder
+from llm.schemas import PromptPackage
 
 
 DRIVING = "DRIVING"
@@ -27,6 +28,8 @@ class DecisionEngineResult:
     framework_name: str
     context: DecisionContext
     decision: EthicalDecision
+    llm_request: str
+    llm_response: str
 
 
 class CodeDecisionEngine:
@@ -68,6 +71,7 @@ class LLMDecisionEngine:
         self._started_at = 0.0
         self._pending_framework = ""
         self._pending_context: DecisionContext | None = None
+        self._pending_request = ""
 
     @property
     def is_waiting(self) -> bool:
@@ -97,6 +101,7 @@ class LLMDecisionEngine:
         self._started_at = monotonic()
         self._pending_framework = framework_name
         self._pending_context = context
+        self._pending_request = self._format_request_for_log(prompt)
         self._future = self._executor.submit(
             self._generate_with_retries,
             framework_name,
@@ -109,16 +114,21 @@ class LLMDecisionEngine:
         self,
         framework_name: str,
         context: DecisionContext,
-        prompt,
+        prompt: PromptPackage,
     ) -> DecisionEngineResult:
         started_at = monotonic()
         last_error = "Unknown LLM error"
+        last_response = ""
+        request_log = self._format_request_for_log(prompt)
         for attempt in range(1, self.max_attempts + 1):
+            attempt_response = ""
             try:
                 raw_response = self.client.generate(
                     prompt,
                     timeout_seconds=self.timeout_seconds,
                 )
+                attempt_response = raw_response.text
+                last_response = attempt_response
                 parsed = parse_decision(raw_response.text)
                 latency_ms = int(round((monotonic() - started_at) * 1000))
                 decision = EthicalDecision(
@@ -132,9 +142,16 @@ class LLMDecisionEngine:
                         "attempts": attempt,
                     },
                 )
-                return DecisionEngineResult(framework_name, context, decision)
+                return DecisionEngineResult(
+                    framework_name,
+                    context,
+                    decision,
+                    request_log,
+                    raw_response.text,
+                )
             except Exception as error:  # Provider/timeout/parser boundary.
                 last_error = safe_error_message(error)
+                last_response = attempt_response or f"ERROR: {last_error}"
 
         latency_ms = int(round((monotonic() - started_at) * 1000))
         return self._fallback_result(
@@ -143,6 +160,16 @@ class LLMDecisionEngine:
             latency_ms=latency_ms,
             attempts=self.max_attempts,
             error=last_error,
+            request_log=request_log,
+            response_log=last_response,
+        )
+
+    @staticmethod
+    def _format_request_for_log(prompt: PromptPackage) -> str:
+        return (
+            "SYSTEM INSTRUCTION\n"
+            f"{prompt.system_instruction}\n\n"
+            f"{prompt.prompt}"
         )
 
     def _fallback_result(
@@ -153,6 +180,8 @@ class LLMDecisionEngine:
         latency_ms: int,
         attempts: int,
         error: str,
+        request_log: str,
+        response_log: str,
     ) -> DecisionEngineResult:
         return DecisionEngineResult(
             framework_name,
@@ -172,6 +201,8 @@ class LLMDecisionEngine:
                     "llm_error": safe_error_message(error),
                 },
             ),
+            request_log,
+            response_log or f"ERROR: {safe_error_message(error)}",
         )
 
     def poll(self) -> DecisionEngineResult | None:
@@ -196,6 +227,8 @@ class LLMDecisionEngine:
                     latency_ms=elapsed_ms,
                     attempts=self.max_attempts,
                     error=str(error) or type(error).__name__,
+                    request_log=self._pending_request,
+                    response_log=f"ERROR: {safe_error_message(error)}",
                 )
         else:
             future.cancel()
@@ -207,11 +240,14 @@ class LLMDecisionEngine:
                 latency_ms=elapsed_ms,
                 attempts=self.max_attempts,
                 error="Decision request exceeded the timeout budget",
+                request_log=self._pending_request,
+                response_log="ERROR: Decision request exceeded the timeout budget",
             )
 
         self._future = None
         self._pending_framework = ""
         self._pending_context = None
+        self._pending_request = ""
         return result
 
     def cancel(self) -> None:
@@ -221,6 +257,7 @@ class LLMDecisionEngine:
         self._future = None
         self._pending_framework = ""
         self._pending_context = None
+        self._pending_request = ""
 
     def close(self) -> None:
         self.cancel()

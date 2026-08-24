@@ -151,6 +151,8 @@ class AsyncLLMEngineTests(unittest.TestCase):
         self.assertEqual(STAY, result.decision.action)
         self.assertEqual(2, result.decision.details["attempts"])
         self.assertFalse(result.decision.details["fallback"])
+        self.assertIn("SYSTEM INSTRUCTION", result.llm_request)
+        self.assertIn('"action":"STAY"', result.llm_response)
 
     def test_errors_fall_back_to_stay_and_are_recorded(self) -> None:
         client = FakeClient([RuntimeError("offline"), RuntimeError("offline")])
@@ -172,6 +174,7 @@ class AsyncLLMEngineTests(unittest.TestCase):
         self.assertTrue(result.decision.details["fallback"])
         self.assertEqual("llm-agent", result.decision.details["mode"])
         self.assertIn("offline", result.decision.reason)
+        self.assertIn("ERROR: offline", result.llm_response)
 
         framework = UtilitarianFramework()
         framework.record_decision(result.decision, context=result.context)
