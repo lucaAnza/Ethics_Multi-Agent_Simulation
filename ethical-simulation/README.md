@@ -57,6 +57,21 @@ their own conversion factors.
 The time slider scales all simulation movement. Play, pause, and stop control
 the run; there is no manually driven free mode.
 
+## Automated Simulation
+
+The **Automated Simulation** toolbar button opens a headless batch runner with
+three modes: deterministic code only, LLM Agent only, and paired deterministic
+vs LLM execution. Paired runs reuse the same scenario snapshot, vehicle
+parameters, entity positions, and random seed for both implementations.
+
+The Arcade window remains responsive while a batch runs in the background and
+can cancel it at any time. Movement, perception, collisions, decision triggers,
+framework calls, and statistics all pass through the same `SimulationEngine`
+used by the interactive view; headless worlds never initialize drawing objects.
+The final **Batch Report** aggregates deaths, categories, lane changes,
+decisions, framework metrics, and LLM reliability/latency. Comparison batches
+also report decision agreement and pairs with different casualty outcomes.
+
 The simulation ends only when the primary vehicle reaches the tunnel. The final
 panel reports lane-change usage, victims grouped by category, and rows supplied
 by the active framework. Utilitarianism reports its total casualty malus and the

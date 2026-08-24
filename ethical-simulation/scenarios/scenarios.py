@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
+import random
 from typing import TYPE_CHECKING, Any
 
 from app_logging import application_logger
@@ -202,6 +203,8 @@ def create_scenario(
     name: str,
     road_y: float,
     definitions: Mapping[str, Mapping[str, list[dict[str, Any]]]] | None = None,
+    *,
+    rng: random.Random | None = None,
 ) -> Scenario:
     """Instantiate a fresh scenario from serializable definitions."""
     from simulation.entities import Car, Pedestrian
@@ -219,6 +222,7 @@ def create_scenario(
         )
         for car in definition["cars"]
     ]
+    scenario_rng = rng or random.Random()
     pedestrians = [
         Pedestrian(
             x=float(person["x"]),
@@ -227,6 +231,7 @@ def create_scenario(
             label=person.get("label"),
             action=person.get("action", "still"),
             speed=float(person.get("speed", 55.0)),
+            _rng=scenario_rng,
         )
         for person in definition["pedestrians"]
     ]

@@ -93,6 +93,11 @@ class Pedestrian:
     alive: bool = True
     _random_heading: float = field(default=0.0, init=False, repr=False)
     _random_time_remaining: float = field(default=0.0, init=False, repr=False)
+    _rng: random.Random = field(
+        default_factory=random.Random,
+        repr=False,
+        compare=False,
+    )
 
     def update(self, delta_time: float) -> None:
         """Advance the configured pedestrian action."""
@@ -119,5 +124,5 @@ class Pedestrian:
 
     def redirect_random_movement(self) -> None:
         """Choose a new direction and hold it briefly for smooth random motion."""
-        self._random_heading = random.uniform(0.0, 360.0)
-        self._random_time_remaining = random.uniform(0.65, 1.6)
+        self._random_heading = self._rng.uniform(0.0, 360.0)
+        self._random_time_remaining = self._rng.uniform(0.65, 1.6)

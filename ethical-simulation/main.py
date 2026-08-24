@@ -10,17 +10,22 @@ import arcade.gui
 from dotenv import load_dotenv
 
 from app_logging import application_logger
+from automated import (
+    COMPARISON,
+    ONLY_DETERMINISTIC,
+    ONLY_LLM,
+    AutomatedSimulationRunner,
+    BatchConfig,
+    BatchReport,
+)
 from decision_engine import (
     DRIVING,
-    EXECUTING_DECISION,
     WAITING_FOR_LLM,
     CodeDecisionEngine,
     LLMDecisionEngine,
 )
 from ethics.base import (
     CHANGE_LANE,
-    STAY,
-    DecisionContext as EthicalDecisionContext,
     EthicalDecision,
 )
 from ethics.utilitarian import DEFAULT_ENTITIES_VALUES
@@ -34,14 +39,18 @@ from ethics.rules import DEFAULT_RULE_ENABLED, DEFAULT_RULE_ORDER, MORAL_RULES
 from ethics.utilitarian import UtilitarianFramework
 from ethics.virtue import VirtueEthicsFramework
 from llm import GeminiClient, PromptBuilder
-from llm.errors import safe_error_message
 from scenarios import load_scenario_definitions, save_scenario_definitions
-from simulation import DetectedIncident, World
+from simulation import SimulationDecisionEvent, SimulationEngine, World
 from simulation.entities import Pedestrian
+from simulation.statistics import casualty_category_counts
+from ui.batch_report import BatchReportRenderer
 from ui.report import SimulationReportData, SimulationReportRenderer
 from ui.screens import (
     ENTITY_MODEL_LABELS,
     PEDESTRIAN_ACTION_LABELS,
+    build_automated_progress,
+    build_automated_settings,
+    build_batch_report_navigation,
     build_framework_settings,
     build_info,
     build_location_picker,
@@ -67,6 +76,9 @@ FRAMEWORK_IMPLEMENTATIONS = {
     "Virtue Ethics": (LLM_MODE,),
 }
 FRAMEWORKS = list(FRAMEWORK_IMPLEMENTATIONS)
+DETERMINISTIC_FRAMEWORKS = [
+    name for name, modes in FRAMEWORK_IMPLEMENTATIONS.items() if CODE_MODE in modes
+]
 LLM_FRAMEWORKS = {
     framework_name
     for framework_name, implementations in FRAMEWORK_IMPLEMENTATIONS.items()
@@ -130,7 +142,6 @@ class SimulationWindow(arcade.Window):
         self.last_decision: EthicalDecision | None = None
         self.decision_phase = DRIVING
         self.decision_sequence = 0
-        self.pending_world_context: DetectedIncident | None = None
 
         self.world = World(
             self.width,
@@ -179,6 +190,21 @@ class SimulationWindow(arcade.Window):
             client=GeminiClient(),
             prompt_builder=PromptBuilder(),
         )
+        self.simulation_engine = SimulationEngine(
+            world=self.world,
+            framework_name=self.current_framework,
+            implementation=self.current_implementation,
+            framework=self.ethical_frameworks[self.current_framework],
+            framework_settings_provider=self._llm_framework_settings,
+            additional_instructions_provider=(
+                lambda framework_name: self.llm_additional_instructions.get(
+                    framework_name,
+                    "",
+                )
+            ),
+            code_decision_engine=self.code_decision_engine,
+            llm_decision_engine=self.llm_decision_engine,
+        )
         self.utilitarian_entity_inputs: dict[str, arcade.gui.UIInputText] = {}
         self.llm_additional_instructions_input: arcade.gui.UIInputText | None = None
         self.framework_status_label: arcade.gui.UILabel | None = None
@@ -213,6 +239,23 @@ class SimulationWindow(arcade.Window):
         self._llm_loading_texts = self._create_llm_loading_texts()
         self.report_renderer = SimulationReportRenderer()
         self.report_page = 0
+        self.automated_runner = AutomatedSimulationRunner()
+        self.batch_renderer = BatchReportRenderer()
+        self.automated_mode = ONLY_DETERMINISTIC
+        self.automated_framework = "Utilitarianism"
+        self.automated_scenario = self.current_scenario
+        self.automated_counts = {
+            ONLY_DETERMINISTIC: "1000",
+            ONLY_LLM: "10",
+            COMPARISON: "20",
+        }
+        self.automated_seed = ""
+        self.automated_count_input: arcade.gui.UIInputText | None = None
+        self.automated_seed_input: arcade.gui.UIInputText | None = None
+        self.automated_status_label: arcade.gui.UILabel | None = None
+        self.automated_cancel_button: arcade.gui.UIFlatButton | None = None
+        self.last_batch_config: BatchConfig | None = None
+        self.batch_report: BatchReport | None = None
         self.manager = arcade.gui.UIManager()
         self._setup_toolbar()
         self.manager.enable()
@@ -250,9 +293,9 @@ class SimulationWindow(arcade.Window):
             holder.add(label, anchor_x="left", anchor_y="center")
             return holder, label
 
-        row = arcade.gui.UIBoxLayout(vertical=False, space_between=10)
+        row = arcade.gui.UIBoxLayout(vertical=False, space_between=5)
 
-        selection_controls = arcade.gui.UIBoxLayout(vertical=False, space_between=5)
+        selection_controls = arcade.gui.UIBoxLayout(vertical=False, space_between=4)
         framework = selection_controls.add(
             arcade.gui.UIDropdown(
                 default=self._framework_option(
@@ -260,7 +303,7 @@ class SimulationWindow(arcade.Window):
                     self.current_implementation,
                 ),
                 options=FRAMEWORK_OPTIONS,
-                width=185,
+                width=160,
                 height=34,
             )
         )
@@ -268,16 +311,24 @@ class SimulationWindow(arcade.Window):
             arcade.gui.UIDropdown(
                 default=self.current_scenario,
                 options=self.scenario_names,
-                width=105,
+                width=92,
                 height=34,
             )
         )
-        row.add(section("FRAMEWORK / SIMULATION", selection_controls, 295))
+        automated_button = selection_controls.add(
+            arcade.gui.UIFlatButton(
+                text="Automated Simulation",
+                width=145,
+                height=34,
+            )
+        )
+        automated_button.on_click = self._open_automated_settings
+        row.add(section("FRAMEWORK / SIMULATION", selection_controls, 405))
         row.add(separator())
 
         playback_controls = arcade.gui.UIBoxLayout(vertical=False, space_between=5)
         time_holder, self.time_scale_label = fixed_label(
-            f"Time x{self.time_scale:.2f}", 62
+            f"Time x{self.time_scale:.2f}", 58
         )
         playback_controls.add(time_holder)
         time_slider = playback_controls.add(
@@ -286,26 +337,26 @@ class SimulationWindow(arcade.Window):
                 min_value=0.25,
                 max_value=2.0,
                 step=0.25,
-                width=55,
+                width=44,
                 height=26,
             )
         )
         for label, handler, width in (
             (">", self._play, 34),
             ("||", self._pause, 34),
-            ("Reset", self._stop, 52),
+            ("Reset", self._stop, 48),
         ):
             button = playback_controls.add(
                 arcade.gui.UIFlatButton(text=label, width=width, height=34)
             )
             button.on_click = handler
-        row.add(section("TIME / CONTROLS", playback_controls, 239))
+        row.add(section("TIME / CONTROLS", playback_controls, 226))
         row.add(separator())
 
         vehicle_controls = arcade.gui.UIBoxLayout(vertical=False, space_between=4)
         initial_kmh = self.scenario_initial_speeds[self.current_scenario]
         initial_holder, self.initial_speed_label = fixed_label(
-            f"Speed {initial_kmh:02.0f}", 52, font_size=8
+            f"Speed {initial_kmh:02.0f}", 48, font_size=8
         )
         vehicle_controls.add(initial_holder)
         self.initial_speed_slider = vehicle_controls.add(
@@ -314,13 +365,13 @@ class SimulationWindow(arcade.Window):
                 min_value=0,
                 max_value=200,
                 step=1,
-                width=48,
+                width=38,
                 height=26,
             )
         )
         vision_holder, self.vision_distance_label = fixed_label(
             f"Vision {self.vision_distance:.0f}",
-            62,
+            55,
             font_size=8,
         )
         vehicle_controls.add(vision_holder)
@@ -330,13 +381,13 @@ class SimulationWindow(arcade.Window):
                 min_value=150,
                 max_value=500,
                 step=10,
-                width=50,
+                width=40,
                 height=26,
             )
         )
         decision_holder, self.decision_distance_label = fixed_label(
             f"Decision {self.decision_distance:.0f}",
-            72,
+            62,
             font_size=8,
         )
         vehicle_controls.add(decision_holder)
@@ -346,13 +397,13 @@ class SimulationWindow(arcade.Window):
                 min_value=30,
                 max_value=250,
                 step=10,
-                width=50,
+                width=40,
                 height=26,
             )
         )
         shifts_holder, self.max_spostamenti_label = fixed_label(
             f"Max shifts {self.max_spostamenti}",
-            60,
+            52,
             font_size=8,
         )
         vehicle_controls.add(shifts_holder)
@@ -362,19 +413,19 @@ class SimulationWindow(arcade.Window):
                 min_value=0,
                 max_value=10,
                 step=1,
-                width=42,
+                width=36,
                 height=26,
             )
         )
-        row.add(section("VEHICLE VARIABLES", vehicle_controls, 448))
+        row.add(section("VEHICLE VARIABLES", vehicle_controls, 399))
         row.add(separator())
 
         app_controls = arcade.gui.UIBoxLayout(vertical=False, space_between=5)
         menu_button = app_controls.add(
-            arcade.gui.UIFlatButton(text="Menu", width=82, height=34)
+            arcade.gui.UIFlatButton(text="Menu", width=75, height=34)
         )
         menu_button.on_click = self._open_menu
-        row.add(section("APPLICATION", app_controls, 82))
+        row.add(section("APPLICATION", app_controls, 75))
 
         framework.on_change = self._framework_changed
         scenario.on_change = self._scenario_changed
@@ -396,6 +447,7 @@ class SimulationWindow(arcade.Window):
             self.current_framework = framework_name
             self.current_implementation = implementation
             self.last_decision = None
+            self._configure_simulation_engine()
 
     @staticmethod
     def _framework_option(framework_name: str, implementation: str) -> str:
@@ -422,10 +474,10 @@ class SimulationWindow(arcade.Window):
         self._cancel_pending_decision()
         self.is_running = False
         self.simulation_finished = False
-        self.last_decision = None
-        self.decision_sequence = 0
-        self.decision_phase = DRIVING
         self._reset_framework_state()
+        self._configure_simulation_engine()
+        self.simulation_engine.reset(reset_framework=False)
+        self._sync_simulation_engine_state()
 
     def _scenario_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
         if event.new_value is not None:
@@ -499,77 +551,37 @@ class SimulationWindow(arcade.Window):
     def _pause(self, _event: arcade.gui.UIOnClickEvent) -> None:
         self.is_running = False
 
-    def _maybe_trigger_ethical_decision(self) -> None:
-        world_context = self.world.next_decision_context()
-        if world_context is None:
+    def _configure_simulation_engine(self) -> None:
+        if not hasattr(self, "simulation_engine"):
             return
-        car = self.world.primary_car
-        context = EthicalDecisionContext.from_state(
-            decision_id=self.decision_sequence + 1,
-            vehicle_position=car.x if car is not None else 0.0,
-            state=world_context.state,
-            lane_changes_remaining=self.world.lane_changes_remaining,
+        self.simulation_engine.configure(
+            framework_name=self.current_framework,
+            implementation=self.current_implementation,
+            framework=self.ethical_frameworks[self.current_framework],
         )
-        framework = self.ethical_frameworks.get(self.current_framework)
-        if self.current_implementation == LLM_MODE:
-            try:
-                started = self.llm_decision_engine.submit(
-                    framework_name=self.current_framework,
-                    framework_settings=self._llm_framework_settings(
-                        self.current_framework
-                    ),
-                    additional_instructions=self.llm_additional_instructions.get(
-                        self.current_framework,
-                        "",
-                    ),
-                    context=context,
-                )
-            except Exception as error:
-                error_message = safe_error_message(error)
-                decision = EthicalDecision(
-                    STAY,
-                    (
-                        f"LLM Agent could not start: {error_message}. "
-                        "Safe fallback selected STAY."
-                    ),
-                    {
-                        "mode": LLM_MODE,
-                        "model": self.llm_decision_engine.model_name,
-                        "latency_ms": 0,
-                        "fallback": True,
-                        "attempts": 0,
-                        "llm_error": error_message,
-                    },
-                )
-                self._apply_ethical_decision(
-                    world_context,
-                    self.current_framework,
-                    context,
-                    decision,
-                    llm_request=(
-                        f"Unable to build {self.current_framework} LLM request."
-                    ),
-                    llm_response=f"ERROR: {error_message}",
-                )
-                return
-            if started:
-                self.pending_world_context = world_context
-                self.decision_phase = WAITING_FOR_LLM
-            return
+        self._sync_simulation_engine_state()
 
-        if framework is None:
-            decision = EthicalDecision(
-                STAY,
-                "No active framework; keeping the current lane",
-                {"mode": CODE_MODE},
-            )
-        else:
-            decision = self.code_decision_engine.decide(framework, context)
-        self._apply_ethical_decision(
-            world_context,
-            self.current_framework,
-            context,
-            decision,
+    def _sync_simulation_engine_state(self) -> None:
+        self.decision_phase = self.simulation_engine.phase
+        self.decision_sequence = self.simulation_engine.decision_sequence
+        self.last_decision = self.simulation_engine.last_decision
+
+    @staticmethod
+    def _log_simulation_decision(event: SimulationDecisionEvent) -> None:
+        application_logger.log_decision(
+            framework=event.framework_name,
+            implementation=event.implementation,
+            current_lane_count=len(event.context.current_lane_entities),
+            other_lane_count=len(event.context.other_lane_entities),
+            framework_action=event.recommended_decision.action,
+            applied_action=event.applied_decision.action,
+            reason=event.applied_decision.reason,
+            lane_change_blocked=(
+                event.recommended_decision.action == CHANGE_LANE
+                and not event.lane_change_started
+            ),
+            llm_request=event.llm_request,
+            llm_response=event.llm_response,
         )
 
     def _llm_framework_settings(self, framework_name: str) -> dict:
@@ -587,91 +599,12 @@ class SimulationWindow(arcade.Window):
             )
         return settings
 
-    def _poll_llm_decision(self) -> None:
-        result = self.llm_decision_engine.poll()
-        if result is None:
-            return
-        world_context = self.pending_world_context
-        self.pending_world_context = None
-        if world_context is None:
-            self.decision_phase = DRIVING
-            return
-        self._apply_ethical_decision(
-            world_context,
-            result.framework_name,
-            result.context,
-            result.decision,
-            llm_request=result.llm_request,
-            llm_response=result.llm_response,
-        )
-
-    def _apply_ethical_decision(
-        self,
-        world_context: DetectedIncident,
-        framework_name: str,
-        context: EthicalDecisionContext,
-        decision: EthicalDecision,
-        *,
-        llm_request: str | None = None,
-        llm_response: str | None = None,
-    ) -> None:
-        if decision.action not in {STAY, CHANGE_LANE}:
-            decision = EthicalDecision(
-                STAY,
-                "Invalid decision action; safe fallback selected STAY.",
-                {**decision.details, "fallback": True},
-            )
-
-        actual_decision = decision
-        lane_change_started = False
-        if decision.action == CHANGE_LANE:
-            lane_change_started = self.world.request_lane_change()
-            if not lane_change_started:
-                actual_decision = EthicalDecision(
-                    STAY,
-                    decision.reason,
-                    {
-                        **decision.details,
-                        "recommended_action": decision.action,
-                        "lane_change_blocked": True,
-                    },
-                )
-
-        self.world.mark_decision_handled(world_context)
-        self.decision_sequence = context.decision_id
-        framework = self.ethical_frameworks.get(framework_name)
-        if framework is not None:
-            framework.record_decision(
-                actual_decision,
-                context=context,
-            )
-        self.last_decision = actual_decision
-        self.decision_phase = (
-            EXECUTING_DECISION if lane_change_started else DRIVING
-        )
-
-        application_logger.log_decision(
-            framework=framework_name,
-            implementation=str(
-                actual_decision.details.get("mode", CODE_MODE)
-            ),
-            current_lane_count=len(context.current_lane_entities),
-            other_lane_count=len(context.other_lane_entities),
-            framework_action=decision.action,
-            applied_action=actual_decision.action,
-            reason=actual_decision.reason,
-            lane_change_blocked=(
-                decision.action == CHANGE_LANE and not lane_change_started
-            ),
-            llm_request=llm_request,
-            llm_response=llm_response,
-        )
-
     def _cancel_pending_decision(self) -> None:
-        if hasattr(self, "llm_decision_engine"):
+        if hasattr(self, "simulation_engine"):
+            self.simulation_engine.cancel_pending_decision()
+            self._sync_simulation_engine_state()
+        elif hasattr(self, "llm_decision_engine"):
             self.llm_decision_engine.cancel()
-        self.pending_world_context = None
-        self.decision_phase = DRIVING
 
     def _stop(self, _event: arcade.gui.UIOnClickEvent) -> None:
         self.world.reset()
@@ -733,18 +666,7 @@ class SimulationWindow(arcade.Window):
     def _casualty_category_counts(
         dead: list[Pedestrian],
     ) -> dict[str, int]:
-        counts = {"Child": 0, "Adult": 0, "Elderly": 0}
-        for person in dead:
-            if person.model in {"boy", "girl"}:
-                category = "Child"
-            elif person.model in {"old_man", "old_woman"}:
-                category = "Elderly"
-            elif person.model == "custom":
-                category = "Custom"
-            else:
-                category = "Adult"
-            counts[category] = counts.get(category, 0) + 1
-        return counts
+        return casualty_category_counts(dead)
 
     def _build_report_data(self) -> SimulationReportData:
         dead = self.world.dead_pedestrians()
@@ -1304,36 +1226,211 @@ class SimulationWindow(arcade.Window):
             on_back=self._open_menu,
         )
 
+    def _automated_framework_options(self) -> list[str]:
+        if self.automated_mode == ONLY_LLM:
+            return [f"{name} LLM" for name in FRAMEWORKS]
+        return list(DETERMINISTIC_FRAMEWORKS)
+
+    def _automated_framework_display(self) -> str:
+        if self.automated_mode == ONLY_LLM:
+            return f"{self.automated_framework} LLM"
+        return self.automated_framework
+
+    def _remember_automated_fields(self) -> None:
+        if self.automated_count_input is not None:
+            self.automated_counts[self.automated_mode] = (
+                self.automated_count_input.text.strip()
+            )
+        if self.automated_seed_input is not None:
+            self.automated_seed = self.automated_seed_input.text.strip()
+
+    def _open_automated_settings(
+        self,
+        _event: arcade.gui.UIOnClickEvent | None = None,
+        *,
+        message: str = "",
+    ) -> None:
+        self._pause(None)
+        if self.automated_framework not in (
+            FRAMEWORKS if self.automated_mode == ONLY_LLM else DETERMINISTIC_FRAMEWORKS
+        ):
+            self.automated_framework = "Utilitarianism"
+        if self.automated_scenario not in self.scenario_names:
+            self.automated_scenario = self.scenario_names[0]
+        self.active_screen = "automated_settings"
+        self.manager.clear()
+        (
+            self.automated_count_input,
+            self.automated_seed_input,
+            self.automated_status_label,
+        ) = build_automated_settings(
+            self.manager,
+            mode=self.automated_mode,
+            number_of_runs=self.automated_counts[self.automated_mode],
+            framework=self._automated_framework_display(),
+            scenario=self.automated_scenario,
+            random_seed=self.automated_seed,
+            mode_options=[ONLY_DETERMINISTIC, ONLY_LLM, COMPARISON],
+            framework_options=self._automated_framework_options(),
+            scenario_options=self.scenario_names,
+            message=message,
+            on_mode_change=self._automated_mode_changed,
+            on_framework_change=self._automated_framework_changed,
+            on_scenario_change=self._automated_scenario_changed,
+            on_start=self._start_automated_batch,
+            on_back=self._return_to_simulation,
+        )
+
+    def _automated_mode_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
+        if event.new_value is None:
+            return
+        self._remember_automated_fields()
+        self.automated_mode = str(event.new_value)
+        if (
+            self.automated_mode != ONLY_LLM
+            and self.automated_framework not in DETERMINISTIC_FRAMEWORKS
+        ):
+            self.automated_framework = "Utilitarianism"
+        self._open_automated_settings()
+
+    def _automated_framework_changed(
+        self,
+        event: arcade.gui.UIOnChangeEvent,
+    ) -> None:
+        if event.new_value is not None:
+            selected = str(event.new_value)
+            if selected.endswith(" LLM"):
+                selected = selected[:-4]
+            if selected in FRAMEWORKS:
+                self.automated_framework = selected
+
+    def _automated_scenario_changed(
+        self,
+        event: arcade.gui.UIOnChangeEvent,
+    ) -> None:
+        if event.new_value is not None and event.new_value in self.scenario_names:
+            self.automated_scenario = str(event.new_value)
+
+    def _set_automated_error(self, message: str) -> None:
+        if self.automated_status_label is not None:
+            self.automated_status_label.text = message
+
+    def _build_automated_config(self) -> BatchConfig:
+        self._remember_automated_fields()
+        try:
+            count = int(self.automated_counts[self.automated_mode])
+        except ValueError as error:
+            raise ValueError("Number of simulations must be an integer") from error
+        maximum = 1_000_000 if self.automated_mode == ONLY_DETERMINISTIC else 1000
+        if not 1 <= count <= maximum:
+            raise ValueError(f"Number of simulations must be between 1 and {maximum}")
+        try:
+            seed = int(self.automated_seed) if self.automated_seed else None
+        except ValueError as error:
+            raise ValueError("Random seed must be an integer or left empty") from error
+
+        return BatchConfig(
+            mode=self.automated_mode,
+            number_of_runs=count,
+            framework_name=self.automated_framework,
+            scenario_name=self.automated_scenario,
+            random_seed=seed,
+            scenario_definitions=deepcopy(self.scenario_definitions),
+            framework_settings=self._llm_framework_settings(
+                self.automated_framework
+            ),
+            utilitarian_values=deepcopy(
+                self.framework_settings["Utilitarianism"]
+            ),
+            additional_instructions=self.llm_additional_instructions.get(
+                self.automated_framework,
+                "",
+            ),
+            world_width=self.width,
+            world_height=self.height,
+            vision_distance=self.vision_distance,
+            decision_distance=self.decision_distance,
+            max_lane_changes=self.max_spostamenti,
+        )
+
+    def _start_automated_batch(
+        self,
+        _event: arcade.gui.UIOnClickEvent | None = None,
+    ) -> None:
+        try:
+            config = self._build_automated_config()
+            self.automated_runner.start(config)
+        except (RuntimeError, ValueError) as error:
+            self._set_automated_error(str(error))
+            return
+        self.last_batch_config = config
+        self.batch_report = None
+        self.active_screen = "automated_progress"
+        self.manager.clear()
+        self.automated_cancel_button = build_automated_progress(
+            self.manager,
+            on_cancel=self._cancel_automated_batch,
+        )
+
+    def _cancel_automated_batch(
+        self,
+        _event: arcade.gui.UIOnClickEvent | None = None,
+    ) -> None:
+        self.automated_runner.cancel()
+        if self.automated_cancel_button is not None:
+            self.automated_cancel_button.text = "Cancelling..."
+            self.automated_cancel_button.disabled = True
+
+    def _restart_automated_batch(
+        self,
+        _event: arcade.gui.UIOnClickEvent | None = None,
+    ) -> None:
+        if self.last_batch_config is None:
+            self._open_automated_settings()
+            return
+        try:
+            self.automated_runner.start(self.last_batch_config)
+        except RuntimeError as error:
+            self._open_automated_settings(message=str(error))
+            return
+        self.batch_report = None
+        self.active_screen = "automated_progress"
+        self.manager.clear()
+        self.automated_cancel_button = build_automated_progress(
+            self.manager,
+            on_cancel=self._cancel_automated_batch,
+        )
+
     @staticmethod
     def _open_repository(_event: arcade.gui.UIOnClickEvent | None = None) -> None:
         webbrowser.open(GITHUB_REPOSITORY)
 
     def on_update(self, delta_time: float) -> None:
+        if self.active_screen == "automated_progress":
+            report = self.automated_runner.poll_report()
+            if report is not None:
+                self.batch_report = report
+                self.active_screen = "batch_report"
+                self.manager.clear()
+                build_batch_report_navigation(
+                    self.manager,
+                    on_back=self._open_automated_settings,
+                    on_restart=self._restart_automated_batch,
+                )
+            return
+
         if self.active_screen != "simulation":
             return
 
         if not self.is_running:
             return
 
-        if self.decision_phase == WAITING_FOR_LLM:
-            # Virtual time is intentionally frozen while the provider works.
-            self._poll_llm_decision()
-            return
-
         scaled_delta_time = delta_time * self.time_scale
-        if self.decision_phase == DRIVING:
-            self._maybe_trigger_ethical_decision()
-            if self.decision_phase == WAITING_FOR_LLM:
-                return
-
-        reached_tunnel = self.world.update(scaled_delta_time)
-        car = self.world.primary_car
-        if (
-            self.decision_phase == EXECUTING_DECISION
-            and (car is None or not car.is_changing_lane)
-        ):
-            self.decision_phase = DRIVING
-        if reached_tunnel and not self.simulation_finished:
+        step = self.simulation_engine.step(scaled_delta_time)
+        self._sync_simulation_engine_state()
+        if step.decision_event is not None:
+            self._log_simulation_decision(step.decision_event)
+        if step.reached_tunnel and not self.simulation_finished:
             self._show_simulation_end()
 
     def on_draw(self) -> None:
@@ -1403,6 +1500,22 @@ class SimulationWindow(arcade.Window):
             )
             self.manager.draw()
             return
+        if self.active_screen == "automated_progress":
+            self.batch_renderer.draw_progress(
+                self.width,
+                self.height,
+                self.automated_runner.progress(),
+            )
+            self.manager.draw()
+            return
+        if self.active_screen == "batch_report" and self.batch_report is not None:
+            self.batch_renderer.draw_report(
+                self.width,
+                self.height,
+                self.batch_report,
+            )
+            self.manager.draw()
+            return
         if self.active_screen != "simulation":
             self._draw_navigation_background()
             self.manager.draw()
@@ -1462,6 +1575,12 @@ class SimulationWindow(arcade.Window):
                     self._cancel_scenario_location_picker()
                 elif self.active_screen == "report":
                     self._back_to_summary()
+                elif self.active_screen == "automated_progress":
+                    self._cancel_automated_batch()
+                elif self.active_screen == "batch_report":
+                    self._open_automated_settings()
+                elif self.active_screen == "automated_settings":
+                    self._return_to_simulation()
                 elif self.active_screen == "menu":
                     self._return_to_simulation()
                 else:
@@ -2011,6 +2130,8 @@ class SimulationWindow(arcade.Window):
             self._setup_report_navigation()
 
     def on_close(self) -> None:
+        self.automated_runner.close()
+        self.simulation_engine.close()
         self.llm_decision_engine.close()
         self.manager.disable()
         super().on_close()

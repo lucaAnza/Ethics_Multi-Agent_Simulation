@@ -45,21 +45,11 @@ By combining a generated simulation environment with LLM-based agents, the proje
 
 # IDEAS
 
-0. UTILITARSIM -> AI + CODE   | DEONTOLOGY -> CODE | ...
-1. In the deontology framework, define a menù where is possible to set the rules could be a quiz, the car is allowed only
-to execute action that follow the rules. (example someone that follow the rule and someone don't, someone)
-2. For each scenario define a way to set how much time we have to make the decision.
+1. Define a random scenario that generate himself. He randomly generated number of entities. type of entities (something like a cicle where each time take a different entities). Location that should be in a range
+of x,y such that they are always in one of the two street line. In addition there is a variable called
+moved_probability that is setted to 0.1 at the beggining that can add a move that could be up,... (there is already this function). for an entities.
 
-3. Agents idea:
-
-**Utilitarianism** : Default options modificable using menu (llm allows a custom)
-
-**Deontology (Kant)**  : Default options modificable using menu (llm allows a custom)
-
-**Deontology (Constant)** Same of above but including extreme case
-
-**Virtue ethics** 
-
+2. Set in the simulation automated possibility to activate random max_shift and set an interval of the possible value. Same for the other decision_distance,...
 
 
 SCENARIO:

@@ -721,6 +721,182 @@ def build_report_navigation(
     manager.add(anchor)
 
 
+def build_automated_settings(
+    manager: arcade.gui.UIManager,
+    *,
+    mode: str,
+    number_of_runs: str,
+    framework: str,
+    scenario: str,
+    random_seed: str,
+    mode_options: list[str],
+    framework_options: list[str],
+    scenario_options: list[str],
+    message: str,
+    on_mode_change: Callable,
+    on_framework_change: Callable,
+    on_scenario_change: Callable,
+    on_start: Callable,
+    on_back: Callable,
+) -> tuple[
+    arcade.gui.UIInputText,
+    arcade.gui.UIInputText,
+    arcade.gui.UILabel,
+]:
+    """Build the batch configuration form and return its editable fields."""
+    content = arcade.gui.UIBoxLayout(vertical=True, space_between=12, width=620)
+    content.add(
+        _heading(
+            "AUTOMATED SIMULATION",
+            "RUN THE SHARED SIMULATION ENGINE WITHOUT RENDERING",
+            620,
+        )
+    )
+
+    form = arcade.gui.UIBoxLayout(vertical=True, space_between=10, width=620)
+
+    def dropdown_row(
+        label: str,
+        selected: str,
+        options: list[str],
+        callback: Callable,
+    ) -> None:
+        row = arcade.gui.UIBoxLayout(vertical=False, space_between=12)
+        row.add(
+            arcade.gui.UILabel(
+                text=label,
+                width=215,
+                height=38,
+                font_size=11,
+                text_color=MUTED,
+            )
+        )
+        dropdown = row.add(
+            arcade.gui.UIDropdown(
+                default=selected,
+                options=options,
+                width=390,
+                height=38,
+            )
+        )
+        dropdown.on_change = callback
+        form.add(row)
+
+    dropdown_row("Mode", mode, mode_options, on_mode_change)
+
+    count_row = arcade.gui.UIBoxLayout(vertical=False, space_between=12)
+    count_row.add(
+        arcade.gui.UILabel(
+            text=(
+                "Number of paired simulations"
+                if mode == "Deterministic vs LLM"
+                else "Number of simulations"
+            ),
+            width=215,
+            height=38,
+            font_size=11,
+            text_color=MUTED,
+        )
+    )
+    count_input = count_row.add(
+        arcade.gui.UIInputText(
+            text=number_of_runs,
+            width=390,
+            height=38,
+            font_size=12,
+        )
+    )
+    form.add(count_row)
+    dropdown_row("Framework", framework, framework_options, on_framework_change)
+    dropdown_row("Scenario", scenario, scenario_options, on_scenario_change)
+
+    seed_row = arcade.gui.UIBoxLayout(vertical=False, space_between=12)
+    seed_row.add(
+        arcade.gui.UILabel(
+            text="Random seed (optional)",
+            width=215,
+            height=38,
+            font_size=11,
+            text_color=MUTED,
+        )
+    )
+    seed_input = seed_row.add(
+        arcade.gui.UIInputText(
+            text=random_seed,
+            width=390,
+            height=38,
+            font_size=12,
+        )
+    )
+    form.add(seed_row)
+    form.with_background(color=(25, 34, 45, 245))
+    form.with_border(width=1, color=(61, 76, 94))
+    form.with_padding(all=18)
+    content.add(form)
+
+    if mode == "Only Deterministic":
+        note = "Optimized headless execution · suitable for large batches."
+        note_color = (74, 222, 128)
+    else:
+        note = (
+            "Expected decision time: ~1s–10s · timeout, retry and fallback "
+            "remain active."
+        )
+        note_color = (251, 146, 60)
+    content.add(
+        arcade.gui.UILabel(
+            text=note,
+            width=620,
+            height=28,
+            font_size=9,
+            text_color=note_color,
+            align="center",
+        )
+    )
+    status = content.add(
+        arcade.gui.UILabel(
+            text=message,
+            width=620,
+            height=28,
+            font_size=9,
+            text_color=(248, 113, 113),
+            align="center",
+        )
+    )
+    actions = arcade.gui.UIBoxLayout(vertical=False, space_between=12)
+    actions.add(_button("Back to Simulation", on_back, 210, variant="back"))
+    actions.add(_button("Start Batch", on_start, 210, variant="save"))
+    content.add(actions)
+    _add_centered(manager, content)
+    return count_input, seed_input, status
+
+
+def build_automated_progress(
+    manager: arcade.gui.UIManager,
+    *,
+    on_cancel: Callable,
+) -> arcade.gui.UIFlatButton:
+    button = _button("Cancel", on_cancel, 170, variant="danger")
+    anchor = arcade.gui.UIAnchorLayout()
+    anchor.add(button, anchor_x="center", anchor_y="bottom", align_y=64)
+    manager.add(anchor)
+    return button
+
+
+def build_batch_report_navigation(
+    manager: arcade.gui.UIManager,
+    *,
+    on_back: Callable,
+    on_restart: Callable,
+) -> None:
+    actions = arcade.gui.UIBoxLayout(vertical=False, space_between=12)
+    actions.add(_button("Back to Setup", on_back, 190, variant="back", height=38))
+    actions.add(_button("Restart Batch", on_restart, 190, variant="save", height=38))
+    anchor = arcade.gui.UIAnchorLayout()
+    anchor.add(actions, anchor_x="center", anchor_y="bottom", align_y=20)
+    manager.add(anchor)
+
+
 def build_scenario_settings(
     manager: arcade.gui.UIManager,
     *,

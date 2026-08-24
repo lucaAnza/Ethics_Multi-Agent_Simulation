@@ -4,9 +4,23 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Callable
+import random
+from typing import TYPE_CHECKING, Any, Callable
 
-import arcade
+if TYPE_CHECKING:
+    import arcade
+
+arcade = None
+
+
+def _require_arcade():
+    """Load Arcade only for interactive rendering, never for headless runs."""
+    global arcade
+    if arcade is None:
+        import arcade as arcade_module
+
+        arcade = arcade_module
+    return arcade
 
 from scenarios import create_scenario
 from simulation.entities import Car, Pedestrian
@@ -39,11 +53,16 @@ class World:
         scenario_definitions: Mapping[
             str, Mapping[str, list[dict[str, Any]]]
         ] | None = None,
+        *,
+        random_seed: int | None = None,
+        rendering_enabled: bool = True,
     ) -> None:
         self.width = width
         self.height = height
         self.scenario_name = scenario
         self.scenario_definitions = scenario_definitions
+        self.random_seed = random_seed
+        self.rendering_enabled = rendering_enabled
         self.cars: list[Car] = []
         self.pedestrians: list[Pedestrian] = []
         self.vision_distance = 300.0
@@ -53,26 +72,30 @@ class World:
         self.reached_tunnel = False
         self._handled_incident_ids: set[int] = set()
         self._label_texts: dict[int, arcade.Text] = {}
-        self._tunnel_text = arcade.Text(
-            "TUNNEL",
-            0,
-            0,
-            (225, 231, 236),
-            10,
-            anchor_x="center",
-            anchor_y="center",
-            bold=True,
-        )
-        self._other_lane_vision_text = arcade.Text(
-            "ADJACENT LANE VISION",
-            0,
-            0,
-            (255, 166, 77, 235),
-            8,
-            anchor_x="left",
-            anchor_y="center",
-            bold=True,
-        )
+        self._tunnel_text = None
+        self._other_lane_vision_text = None
+        if rendering_enabled:
+            _require_arcade()
+            self._tunnel_text = arcade.Text(
+                "TUNNEL",
+                0,
+                0,
+                (225, 231, 236),
+                10,
+                anchor_x="center",
+                anchor_y="center",
+                bold=True,
+            )
+            self._other_lane_vision_text = arcade.Text(
+                "ADJACENT LANE VISION",
+                0,
+                0,
+                (255, 166, 77, 235),
+                8,
+                anchor_x="left",
+                anchor_y="center",
+                bold=True,
+            )
         self.reset(scenario)
 
     @property
@@ -279,6 +302,7 @@ class World:
             self.scenario_name,
             self.road_y,
             self.scenario_definitions,
+            rng=random.Random(self.random_seed),
         )
         self.cars = initial.cars
         self.pedestrians = initial.pedestrians
@@ -307,6 +331,9 @@ class World:
             car.shift_lane_change_y(shift)
 
     def draw(self, *, show_vehicle_vision: bool = True) -> None:
+        if not self.rendering_enabled:
+            raise RuntimeError("Rendering is disabled for this World")
+        _require_arcade()
         arcade.draw_lbwh_rectangle_filled(
             0,
             0,
@@ -442,9 +469,10 @@ class World:
             (183, 188, 190),
             2,
         )
-        self._tunnel_text.x = self.tunnel_x + 43
-        self._tunnel_text.y = road_bottom + self.ROAD_HALF_HEIGHT * 2 + 11
-        self._tunnel_text.draw()
+        if self._tunnel_text is not None:
+            self._tunnel_text.x = self.tunnel_x + 43
+            self._tunnel_text.y = road_bottom + self.ROAD_HALF_HEIGHT * 2 + 11
+            self._tunnel_text.draw()
 
     @staticmethod
     def _draw_dashed_horizontal(
@@ -559,9 +587,10 @@ class World:
             )
 
         label_x = min(transition_end_x + 10.0, end_x - 5.0)
-        self._other_lane_vision_text.x = label_x
-        self._other_lane_vision_text.y = other_lane_y
-        self._other_lane_vision_text.draw()
+        if self._other_lane_vision_text is not None:
+            self._other_lane_vision_text.x = label_x
+            self._other_lane_vision_text.y = other_lane_y
+            self._other_lane_vision_text.draw()
 
     @staticmethod
     def _draw_car(car: Car) -> None:
