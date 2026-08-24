@@ -302,7 +302,7 @@ class SimulationWindow(arcade.Window):
         row.add(separator())
 
         vehicle_controls = arcade.gui.UIBoxLayout(vertical=False, space_between=4)
-        initial_kmh = self.scenario_initial_speeds[self.current_scenario] * 0.18
+        initial_kmh = self.scenario_initial_speeds[self.current_scenario]
         initial_holder, self.initial_speed_label = fixed_label(
             f"Speed {initial_kmh:02.0f}", 52, font_size=8
         )
@@ -437,8 +437,8 @@ class SimulationWindow(arcade.Window):
             )
             speed = self.scenario_initial_speeds[self.current_scenario]
             self.world.cars[0].speed = speed
-            self.initial_speed_slider.value = speed * 0.18
-            self.initial_speed_label.text = f"Speed {speed * 0.18:02.0f}"
+            self.initial_speed_slider.value = speed
+            self.initial_speed_label.text = f"Speed {speed:02.0f}"
             self._reset_run_state()
 
     def _time_scale_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
@@ -449,9 +449,8 @@ class SimulationWindow(arcade.Window):
     def _initial_speed_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
         if event.new_value is not None:
             speed_kmh = float(event.new_value)
-            speed = speed_kmh / 0.18
-            self.scenario_initial_speeds[self.current_scenario] = speed
-            self.world.cars[0].speed = speed
+            self.scenario_initial_speeds[self.current_scenario] = speed_kmh
+            self.world.cars[0].speed = speed_kmh
             self.initial_speed_label.text = f"Speed {speed_kmh:02.0f}"
 
     def _vision_distance_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
@@ -1085,7 +1084,7 @@ class SimulationWindow(arcade.Window):
             speed_kmh = number("speed_kmh", "Speed", minimum=0.1)
             if speed_kmh is None:
                 return False
-            entity.update({"speed": speed_kmh / 0.18})
+            entity.update({"speed": speed_kmh})
         else:
             selected_label = (
                 self.scenario_editor_model.value
@@ -1154,7 +1153,7 @@ class SimulationWindow(arcade.Window):
             {
                 "x": 130.0 + 110.0 * len(cars),
                 "y_offset": -45.0,
-                "speed": 120.0,
+                "speed": 50.0,
             }
         )
         self.scenario_editor_entity = ("cars", len(cars) - 1)
@@ -1889,7 +1888,7 @@ class SimulationWindow(arcade.Window):
 
     def _draw_vehicle_hud(self) -> None:
         car = self.world.cars[0]
-        speed_kmh = car.speed * 0.18
+        speed_kmh = car.speed
 
         panel_width = 278
         panel_height = 258

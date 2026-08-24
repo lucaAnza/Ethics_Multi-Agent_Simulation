@@ -1,12 +1,12 @@
 {
-  "version": 1,
+  "version": 2,
   "scenarios": {
     "Scenario 1": {
       "cars": [
         {
           "x": 130.0,
           "y_offset": -45.0,
-          "speed": 120.00000000000001
+          "speed": 50.0
         }
       ],
       "pedestrians": [
@@ -33,7 +33,7 @@
         {
           "x": 130.0,
           "y_offset": -45.0,
-          "speed": 120.0
+          "speed": 50.0
         }
       ],
       "pedestrians": [

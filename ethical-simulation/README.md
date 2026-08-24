@@ -49,6 +49,11 @@ The **Vehicle Variables** toolbar section controls:
 - `decision_distance`, the threshold that triggers a decision;
 - `max_spostamenti`, the maximum number of lane changes.
 
+Vehicle `speed` values in `scenarios/scenario_settings.json` are expressed
+directly in km/h. The single km/h-to-pixels conversion used for rendering lives
+in `simulation/units.py`; the toolbar, HUD, and scenario editor do not apply
+their own conversion factors.
+
 The time slider scales all simulation movement. Play, pause, and stop control
 the run; there is no manually driven free mode.
 

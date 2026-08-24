@@ -36,7 +36,7 @@ PEDESTRIAN_ACTIONS = {
 DEFAULT_SCENARIO_DEFINITIONS: dict[str, dict[str, list[dict[str, Any]]]] = {
     "Scenario 1": {
         "cars": [
-            {"x": 130.0, "y_offset": -45.0, "speed": 120.0}
+            {"x": 130.0, "y_offset": -45.0, "speed": 50.0}
         ],
         "pedestrians": [
             {
@@ -51,7 +51,7 @@ DEFAULT_SCENARIO_DEFINITIONS: dict[str, dict[str, list[dict[str, Any]]]] = {
     },
     "Scenario 2": {
         "cars": [
-            {"x": 130.0, "y_offset": -45.0, "speed": 120.0}
+            {"x": 130.0, "y_offset": -45.0, "speed": 50.0}
         ],
         "pedestrians": [
             {"x": 400.0, "y_offset": 46.0, "model": "man", "label": None},
@@ -108,7 +108,7 @@ def validate_scenario_definitions(
         for index, raw_car in enumerate(raw_cars):
             if not isinstance(raw_car, Mapping):
                 raise ValueError(f"{raw_name}.cars[{index}] must be an object")
-            speed = _finite_number(raw_car.get("speed", 120.0), "speed")
+            speed = _finite_number(raw_car.get("speed", 50.0), "speed")
             if speed <= 0:
                 raise ValueError("car speed must be greater than zero")
             cars.append(
@@ -184,7 +184,7 @@ def save_scenario_definitions(
 ) -> dict[str, dict[str, list[dict[str, Any]]]]:
     """Validate and atomically save the scenario catalog as JSON."""
     normalized = validate_scenario_definitions(definitions)
-    payload = {"version": 1, "scenarios": normalized}
+    payload = {"version": 2, "scenarios": normalized}
     temporary_path = path.with_suffix(f"{path.suffix}.tmp")
     temporary_path.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
@@ -210,7 +210,7 @@ def create_scenario(
         Car(
             x=float(car["x"]),
             y=road_y + float(car["y_offset"]),
-            speed=float(car.get("speed", 120.0)),
+            speed=float(car.get("speed", 50.0)),
             lane_index=1 if float(car["y_offset"]) >= 0 else 0,
         )
         for car in definition["cars"]

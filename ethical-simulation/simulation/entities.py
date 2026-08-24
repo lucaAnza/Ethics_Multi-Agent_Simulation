@@ -4,6 +4,7 @@ import math
 import random
 from dataclasses import dataclass, field
 from typing import Literal
+from .units import vehicle_kmh_to_pixels_per_second
 
 
 PedestrianModel = Literal[
@@ -30,7 +31,8 @@ PedestrianAction = Literal[
 class Car:
     x: float
     y: float
-    speed: float = 120.0
+    # Public vehicle speed is always expressed in km/h.
+    speed: float = 50.0
     lane_index: int = 0
     _lane_change_start_y: float = field(default=0.0, init=False, repr=False)
     _lane_change_target_y: float = field(default=0.0, init=False, repr=False)
@@ -59,7 +61,7 @@ class Car:
         return True
 
     def update(self, delta_time: float) -> None:
-        self.x += self.speed * delta_time
+        self.x += vehicle_kmh_to_pixels_per_second(self.speed) * delta_time
         if not self.is_changing_lane:
             return
 
