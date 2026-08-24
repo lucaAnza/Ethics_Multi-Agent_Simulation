@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .base import STAY, EthicalDecision, EthicalFramework, EntitySnapshot, PerceptionState
+from .base import STAY, DecisionContext, EthicalDecision, EthicalFramework, EntitySnapshot
 from .rules import (
     DEFAULT_RULE_ENABLED,
     DEFAULT_RULE_ORDER,
@@ -36,11 +36,11 @@ class KantFramework(EthicalFramework):
         self.rule_order = normalize_rule_order(rule_order)
         self.enabled_rules = normalize_enabled_rules(enabled_rules)
 
-    def decide(self, state: PerceptionState) -> EthicalDecision:
+    def decide(self, context: DecisionContext) -> EthicalDecision:
         for rule_key in self.rule_order:
             if not self.enabled_rules[rule_key]:
                 continue
-            action = evaluate_rule(rule_key, state)
+            action = evaluate_rule(rule_key, context)
             if action is None:
                 continue
             rule_label = MORAL_RULES[rule_key].label

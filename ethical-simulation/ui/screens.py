@@ -10,7 +10,7 @@ import math
 import arcade
 import arcade.gui
 
-FRAMEWORK_NAMES = ["Utilitarianism", "Kant", "Constant", "Ross", "Virtue Ethics"]
+FRAMEWORK_NAMES = ["Utilitarianism", "Kant", "Constant", "Virtue Ethics"]
 
 ENTITY_MODEL_LABELS = {
     "man": "Man",
@@ -261,18 +261,27 @@ def build_framework_settings(
     manager: arcade.gui.UIManager,
     *,
     selected: str,
+    selected_mode: str,
     utilitarian_entity_values: dict[str, float],
     kant_rules: list[tuple[str, str, bool]],
     constant_rules: list[tuple[str, str, bool]],
     constant_conflict_resolution: str,
     conflict_resolvers: list[str],
+    llm_additional_instructions: str,
+    llm_model: str,
     on_select: Callable[[str], None],
+    on_select_mode: Callable[[str], None],
     on_save: Callable,
+    on_save_llm: Callable,
     on_toggle_rule: Callable[[str, str], None],
     on_move_kant_rule: Callable[[str, int], None],
     on_constant_resolver: Callable[[str], None],
     on_back: Callable,
-) -> tuple[dict[str, arcade.gui.UIInputText], arcade.gui.UILabel]:
+) -> tuple[
+    dict[str, arcade.gui.UIInputText],
+    arcade.gui.UIInputText | None,
+    arcade.gui.UILabel,
+]:
     framework_list = arcade.gui.UIBoxLayout(vertical=True, space_between=7)
     framework_list.add(_heading("FRAMEWORKS", "SELECT A FRAMEWORK", 205))
     for framework_name in FRAMEWORK_NAMES:
@@ -291,9 +300,116 @@ def build_framework_settings(
 
     editor = arcade.gui.UIBoxLayout(vertical=True, space_between=9)
     inputs: dict[str, arcade.gui.UIInputText] = {}
+    additional_instructions_input: arcade.gui.UIInputText | None = None
     status = arcade.gui.UILabel(text="", width=490, height=24, font_size=10)
 
-    if selected == "Utilitarianism":
+    supports_llm = selected in {
+        "Utilitarianism",
+        "Kant",
+        "Constant",
+        "Virtue Ethics",
+    }
+    if supports_llm:
+        mode_row = arcade.gui.UIBoxLayout(
+            vertical=False,
+            space_between=8,
+            width=490,
+            height=36,
+        )
+        mode_options = (
+            (("llm-agent", "LLM Agent"),)
+            if selected == "Virtue Ethics"
+            else (("code", "Code"), ("llm-agent", "LLM Agent"))
+        )
+        for mode, label in mode_options:
+            selected_button = mode == selected_mode
+            mode_button = _button(
+                f"*  {label}" if selected_button else label,
+                lambda _event: None,
+                150,
+                variant="selected" if selected_button else "default",
+                height=34,
+            )
+            mode_button.on_click = (
+                lambda _event, implementation=mode: on_select_mode(implementation)
+            )
+            mode_row.add(mode_button)
+        editor.add(mode_row)
+
+    if supports_llm and selected_mode == "llm-agent":
+        editor.add(
+            _heading(
+                f"{selected.upper()} — LLM AGENT",
+                "HIDDEN BASE PROMPTS + STRUCTURED SETTINGS + YOUR INSTRUCTIONS",
+                490,
+            )
+        )
+        provider_row = arcade.gui.UIBoxLayout(
+            vertical=False,
+            space_between=10,
+            width=490,
+            height=38,
+        )
+        provider_holder, _provider_label = _fixed_label(
+            "Provider: Google Gemini",
+            width=225,
+            font_size=10,
+            bold=True,
+        )
+        model_holder, _model_label = _fixed_label(
+            f"Model: {llm_model}",
+            width=255,
+            font_size=10,
+            text_color=(96, 165, 250),
+        )
+        provider_row.add(provider_holder)
+        provider_row.add(model_holder)
+        editor.add(provider_row)
+        editor.add(
+            arcade.gui.UILabel(
+                text=(
+                    "Additional Instructions are appended after the framework's "
+                    "built-in prompt. Existing values and rules are included automatically."
+                ),
+                width=490,
+                height=48,
+                font_size=10,
+                text_color=MUTED,
+                multiline=True,
+            )
+        )
+        editor.add(
+            arcade.gui.UILabel(
+                text="ADDITIONAL INSTRUCTIONS",
+                width=490,
+                height=22,
+                font_size=10,
+                bold=True,
+                text_color=TEXT,
+            )
+        )
+        additional_instructions_input = editor.add(
+            arcade.gui.UIInputText(
+                text=llm_additional_instructions,
+                width=490,
+                height=170,
+                font_size=11,
+                text_color=TEXT,
+                multiline=True,
+            )
+        )
+        status.text = "Instructions are stored in the current application state."
+        status.update_font(font_color=(74, 222, 128))
+        editor.add(status)
+        editor.add(
+            _button(
+                "Save Additional Instructions",
+                on_save_llm,
+                250,
+                variant="save",
+            )
+        )
+    elif selected == "Utilitarianism":
         editor.add(
             _heading(
                 "UTILITARIANISM",
@@ -537,7 +653,7 @@ def build_framework_settings(
     content.add(framework_list)
     content.add(editor)
     _add_centered(manager, content)
-    return inputs, status
+    return inputs, additional_instructions_input, status
 
 
 def build_placeholder(

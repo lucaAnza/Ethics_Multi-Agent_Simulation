@@ -13,8 +13,8 @@ from simulation.entities import Car, Pedestrian
 
 
 @dataclass(frozen=True)
-class DecisionContext:
-    """A single incident and the only state exposed to an ethical framework."""
+class DetectedIncident:
+    """Simulation-owned incident awaiting conversion to a decision context."""
 
     incident_entities: tuple[Pedestrian, ...]
     state: dict[str, list[dict[str, Any]]]
@@ -232,7 +232,7 @@ class World:
             for entity in entities
         ]
 
-    def next_decision_context(self) -> DecisionContext | None:
+    def next_decision_context(self) -> DetectedIncident | None:
         """Return an unhandled incident once it reaches decision distance."""
         car = self.primary_car
         if car is None or car.is_changing_lane or self.reached_tunnel:
@@ -255,7 +255,7 @@ class World:
             for entity in (*current_entities, *other_entities)
             if self._distance_ahead(entity) <= self.decision_distance
         )
-        return DecisionContext(
+        return DetectedIncident(
             incident_entities=incident_entities,
             state={
                 "current_lane_entities": self._serialize_entities(
@@ -269,7 +269,7 @@ class World:
             },
         )
 
-    def mark_decision_handled(self, context: DecisionContext) -> None:
+    def mark_decision_handled(self, context: DetectedIncident) -> None:
         self._handled_incident_ids.update(id(entity) for entity in context.incident_entities)
 
     def reset(self, scenario: str | None = None) -> None:

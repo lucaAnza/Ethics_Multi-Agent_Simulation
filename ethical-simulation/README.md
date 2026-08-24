@@ -14,6 +14,15 @@ pip install -r requirements.txt
 python main.py
 ```
 
+To use an `llm-agent` implementation, configure the Gemini API key before
+starting the application:
+
+```bash
+export GEMINI_API_KEY="your-api-key"
+```
+
+Deterministic `code` implementations do not require an API key.
+
 ## Simulation flow
 
 The vehicle moves forward automatically at the configured speed. Its current
@@ -49,13 +58,31 @@ The report can return to the summary or restart the simulation directly.
 ## Settings
 
 The **Menu** opens framework, scenario, general, and project-info screens.
-**Framework Settings** provides three configurable strategies:
+**Framework Settings** provides four configurable strategies:
 
 - **Utilitarianism** directly compares the configured casualty costs;
 - **Kant** applies enabled moral rules in a user-defined priority order;
 - **Constant** gives every enabled rule equal weight and delegates a moral
   conflict to the selected resolver. The available resolver is currently
   **Utilitarian evaluation**.
+- **Virtue Ethics** uses practical-wisdom instructions and is available only as
+  an LLM Agent implementation.
+
+Utilitarianism, Kant, and Constant can each run as either `(code)` or
+`(llm-agent)`, while Virtue Ethics is exposed only as `(llm-agent)`. Every
+implementation receives the same immutable decision context:
+decision ID, vehicle position, visible entities in both lanes, and remaining
+lane changes. The LLM prompt combines hidden YAML base prompts, the existing
+structured framework settings, optional **Additional Instructions**, and that
+context. Prompts live in `config/prompts/`, while provider integration is
+isolated in `llm/` so another client can replace Gemini later.
+
+Gemini requests use structured JSON output and run outside Arcade's update
+thread. While a request is pending, virtual simulation time is frozen and the
+window remains responsive. Invalid output, provider failures, or exhausted
+timeouts are retried a bounded number of times and then recorded as a safe
+`STAY` fallback. LLM history records include the model and latency; the final
+report shows the implementation and average LLM decision time.
 
 All three frameworks keep their decision reasons in memory for the current run.
 Kant and Constant rule switches, Kant priority controls, and the Constant
@@ -63,5 +90,5 @@ resolver are applied immediately to the simulation state.
 
 **Scenario Settings** provides an editor for cars and pedestrians, including
 map-based placement and pedestrian movement. Saved scenarios are validated and
-loaded from `scenarios/scenario_settings.json` at startup. Ross and General
-Settings remain placeholders.
+loaded from `scenarios/scenario_settings.json` at startup. General Settings
+remains a placeholder.

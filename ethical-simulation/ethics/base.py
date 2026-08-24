@@ -25,13 +25,72 @@ class EthicalDecision:
     details: Mapping[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class DecisionContext:
+    """The complete and framework-agnostic input for one ethical decision."""
+
+    decision_id: int
+    vehicle_position: float
+    current_lane_entities: tuple[EntitySnapshot, ...]
+    other_lane_entities: tuple[EntitySnapshot, ...]
+    lane_changes_remaining: int
+
+    @classmethod
+    def from_state(
+        cls,
+        *,
+        decision_id: int,
+        vehicle_position: float,
+        state: PerceptionState,
+        lane_changes_remaining: int,
+    ) -> "DecisionContext":
+        """Copy simulation perception so decision engines cannot mutate the world."""
+        return cls(
+            decision_id=decision_id,
+            vehicle_position=vehicle_position,
+            current_lane_entities=tuple(
+                dict(entity) for entity in state.get("current_lane_entities", [])
+            ),
+            other_lane_entities=tuple(
+                dict(entity) for entity in state.get("other_lane_entities", [])
+            ),
+            lane_changes_remaining=max(0, int(lane_changes_remaining)),
+        )
+
+    @property
+    def state(self) -> PerceptionState:
+        """Compatibility view used by the existing rule/evaluation helpers."""
+        return {
+            "current_lane_entities": [
+                dict(entity) for entity in self.current_lane_entities
+            ],
+            "other_lane_entities": [
+                dict(entity) for entity in self.other_lane_entities
+            ],
+        }
+
+    def as_payload(self) -> dict[str, Any]:
+        """Return the exact serializable context passed to an LLM provider."""
+        return {
+            "decision_id": self.decision_id,
+            "vehicle_position": self.vehicle_position,
+            "current_lane_entities": [
+                dict(entity) for entity in self.current_lane_entities
+            ],
+            "other_lane_entities": [
+                dict(entity) for entity in self.other_lane_entities
+            ],
+            "lane_changes_remaining": self.lane_changes_remaining,
+        }
+
+
 class EthicalFramework(ABC):
     def __init__(self) -> None:
         self.decision_history: list[DecisionRecord] = []
 
     @abstractmethod
-    def decide(self, state: PerceptionState) -> EthicalDecision:
-        """Choose between STAY and CHANGE_LANE from the two visible lanes."""
+    def decide(self, context: DecisionContext) -> EthicalDecision:
+        """Choose between STAY and CHANGE_LANE from the shared context."""
         raise NotImplementedError
 
     @staticmethod
@@ -71,28 +130,32 @@ class EthicalFramework(ABC):
         self,
         decision: EthicalDecision,
         *,
-        position_x: float,
-        state: PerceptionState,
+        context: DecisionContext,
     ) -> None:
         """Store a generic context-rich record with optional framework details."""
-        rounded_position = round(position_x, 2)
+        rounded_position = round(context.vehicle_position, 2)
         if rounded_position.is_integer():
             rounded_position = int(rounded_position)
-        self.decision_history.append(
-            {
-                "decision_id": len(self.decision_history) + 1,
-                "position_x": rounded_position,
-                "action": decision.action,
-                "current_lane_situation": self._describe_lane(
-                    state.get("current_lane_entities", [])
-                ),
-                "other_lane_situation": self._describe_lane(
-                    state.get("other_lane_entities", [])
-                ),
-                "reason": decision.reason,
-                "framework_details": dict(decision.details),
-            }
-        )
+        details = dict(decision.details)
+        record: DecisionRecord = {
+            "decision_id": context.decision_id,
+            "position_x": rounded_position,
+            "action": decision.action,
+            "current_lane_situation": self._describe_lane(
+                list(context.current_lane_entities)
+            ),
+            "other_lane_situation": self._describe_lane(
+                list(context.other_lane_entities)
+            ),
+            "reason": decision.reason,
+            "framework_details": details,
+        }
+        # Promote generic engine metadata so reports do not need to understand
+        # the private details emitted by each ethical framework.
+        for key in ("mode", "model", "latency_ms", "fallback", "attempts"):
+            if key in details:
+                record[key] = details[key]
+        self.decision_history.append(record)
 
     def reset(self) -> None:
         """Clear any per-simulation state owned by the framework."""

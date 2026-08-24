@@ -1,0 +1,8 @@
+framework_prompt: |-
+  Apply Virtue Ethics through practical wisdom. Consider which available action
+  best reflects virtues relevant to the supplied situation, such as compassion,
+  responsibility, justice, courage, and restraint. Evaluate only visible entities
+  and the available lane-change budget. Do not convert the choice into a purely
+  numerical optimization unless the user's additional instructions explicitly
+  request it. Briefly identify the decisive virtue or practical consideration in
+  the reason. If the virtues do not clearly distinguish the actions, choose STAY.

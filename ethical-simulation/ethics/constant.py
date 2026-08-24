@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from .base import STAY, EthicalDecision, EthicalFramework, EntitySnapshot, PerceptionState
+from .base import STAY, DecisionContext, EthicalDecision, EthicalFramework, EntitySnapshot
 from .evaluation import choose_lower_cost
 from .rules import (
     DEFAULT_RULE_ENABLED,
@@ -53,12 +53,12 @@ class ConstantFramework(EthicalFramework):
         """Keep the utilitarian conflict resolver aligned with shared values."""
         self.entity_values.update(values)
 
-    def decide(self, state: PerceptionState) -> EthicalDecision:
+    def decide(self, context: DecisionContext) -> EthicalDecision:
         votes = [
             (rule_key, action)
             for rule_key in DEFAULT_RULE_ORDER
             if self.enabled_rules[rule_key]
-            if (action := evaluate_rule(rule_key, state)) is not None
+            if (action := evaluate_rule(rule_key, context)) is not None
         ]
         if not votes:
             return EthicalDecision(
@@ -80,8 +80,8 @@ class ConstantFramework(EthicalFramework):
                 },
             )
 
-        current_entities = state.get("current_lane_entities", [])
-        other_entities = state.get("other_lane_entities", [])
+        current_entities = list(context.current_lane_entities)
+        other_entities = list(context.other_lane_entities)
         action, current_cost, other_cost = choose_lower_cost(
             current_entities,
             other_entities,
@@ -112,13 +112,11 @@ class ConstantFramework(EthicalFramework):
         self,
         decision: EthicalDecision,
         *,
-        position_x: float,
-        state: PerceptionState,
+        context: DecisionContext,
     ) -> None:
         super().record_decision(
             decision,
-            position_x=position_x,
-            state=state,
+            context=context,
         )
         if decision.details.get("moral_conflict"):
             self.moral_conflicts += 1

@@ -1,0 +1,63 @@
+"""Google Gemini implementation of the provider-neutral LLM contract."""
+
+from __future__ import annotations
+
+import os
+
+from .base_client import LLMClient
+from .schemas import DECISION_JSON_SCHEMA, LLMRawResponse, PromptPackage
+
+
+class GeminiClient(LLMClient):
+    """Structured-output client backed by the official ``google-genai`` SDK."""
+
+    def __init__(self, model: str = "gemini-3.7-flash") -> None:
+        self._model = model
+
+    @property
+    def model_name(self) -> str:
+        return self._model
+
+    def generate(
+        self,
+        prompt: PromptPackage,
+        *,
+        timeout_seconds: float,
+    ) -> LLMRawResponse:
+        api_key = os.getenv("GEMINI_API_KEY", "").strip()
+        if not api_key:
+            raise RuntimeError("GEMINI_API_KEY is not configured")
+
+        # Imports remain local so deterministic code mode can still start and
+        # explain a missing optional runtime dependency through the fallback.
+        try:
+            from google import genai
+            from google.genai import types
+        except ImportError as error:
+            raise RuntimeError(
+                "The google-genai package is not installed"
+            ) from error
+
+        timeout_ms = max(1, int(timeout_seconds * 1000))
+        client = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(timeout=timeout_ms),
+        )
+        try:
+            response = client.models.generate_content(
+                model=self._model,
+                contents=prompt.prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=prompt.system_instruction,
+                    temperature=0,
+                    response_mime_type="application/json",
+                    response_json_schema=DECISION_JSON_SCHEMA,
+                ),
+            )
+        finally:
+            client.close()
+
+        response_text = response.text
+        if not response_text:
+            raise RuntimeError("Gemini returned an empty response")
+        return LLMRawResponse(text=response_text, model=self._model)

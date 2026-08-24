@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .base import CHANGE_LANE, STAY, PerceptionState
+from .base import CHANGE_LANE, STAY, DecisionContext
 
 
 DO_NOT_REDIRECT_HARM = "do_not_redirect_harm"
@@ -69,10 +69,10 @@ def normalize_enabled_rules(enabled_rules: dict[str, bool]) -> dict[str, bool]:
     }
 
 
-def evaluate_rule(rule_key: str, state: PerceptionState) -> str | None:
+def evaluate_rule(rule_key: str, context: DecisionContext) -> str | None:
     """Evaluate one rule without accessing anything outside vehicle perception."""
-    current_entities = state.get("current_lane_entities", [])
-    other_entities = state.get("other_lane_entities", [])
+    current_entities = context.current_lane_entities
+    other_entities = context.other_lane_entities
     current_count = len(current_entities)
     other_count = len(other_entities)
 

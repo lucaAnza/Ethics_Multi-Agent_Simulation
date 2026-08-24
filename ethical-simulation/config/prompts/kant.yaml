@@ -1,0 +1,5 @@
+framework_prompt: |-
+  Apply the enabled Kantian rules in their configured priority order. Evaluate
+  only applicable rules and let the highest-priority applicable rule determine
+  the action when rules conflict. Do not replace this hierarchy with a numerical
+  optimization. Name the deciding rule in the reason when one resolves the case.

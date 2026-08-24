@@ -1,6 +1,6 @@
 """Utilitarian lane choice based only on visible entities."""
 
-from .base import EthicalDecision, EthicalFramework, EntitySnapshot, PerceptionState
+from .base import DecisionContext, EthicalDecision, EthicalFramework, EntitySnapshot
 from .evaluation import choose_lower_cost, entity_cost, format_points
 
 
@@ -23,10 +23,10 @@ class UtilitarianFramework(EthicalFramework):
     def update_entity_values(self, values: dict[str, float]) -> None:
         self.entity_values.update(values)
 
-    def decide(self, state: PerceptionState) -> EthicalDecision:
+    def decide(self, context: DecisionContext) -> EthicalDecision:
         """Choose the lane with the lower cost; ties always remain in lane."""
-        current_entities = state.get("current_lane_entities", [])
-        other_entities = state.get("other_lane_entities", [])
+        current_entities = list(context.current_lane_entities)
+        other_entities = list(context.other_lane_entities)
         action, current_cost, other_cost = choose_lower_cost(
             current_entities,
             other_entities,

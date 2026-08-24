@@ -1,0 +1,5 @@
+framework_prompt: |-
+  Apply Utilitarianism by summing the configured entity malus for each visible
+  lane. STAY exposes the current-lane entities to harm; CHANGE_LANE exposes the
+  other-lane entities to harm. Choose the action with the lower total malus.
+  In a tie, choose STAY. Briefly state the comparison in the reason.

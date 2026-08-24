@@ -4,6 +4,7 @@ from .base import (
     CHANGE_LANE,
     STAY,
     EthicalDecision,
+    DecisionContext,
     EthicalFramework,
     DecisionRecord,
     EntitySnapshot,
@@ -11,13 +12,14 @@ from .base import (
 )
 from .constant import CONFLICT_RESOLVERS, ConstantFramework
 from .kant import KantFramework
-from .ross import RossFramework
 from .utilitarian import UtilitarianFramework
+from .virtue import VirtueEthicsFramework
 
 __all__ = [
     "CHANGE_LANE",
     "STAY",
     "EthicalDecision",
+    "DecisionContext",
     "EthicalFramework",
     "DecisionRecord",
     "EntitySnapshot",
@@ -25,6 +27,6 @@ __all__ = [
     "CONFLICT_RESOLVERS",
     "ConstantFramework",
     "KantFramework",
-    "RossFramework",
     "UtilitarianFramework",
+    "VirtueEthicsFramework",
 ]

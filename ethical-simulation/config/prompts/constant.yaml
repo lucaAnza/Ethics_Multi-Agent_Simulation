@@ -1,0 +1,5 @@
+framework_prompt: |-
+  Apply every enabled Constant rule at the same moral level. If all applicable
+  rules agree, use their action. If they disagree, identify a moral conflict and
+  use the configured conflict resolver. For Utilitarian evaluation, compare the
+  configured entity malus in both lanes and choose the lower one; ties choose STAY.

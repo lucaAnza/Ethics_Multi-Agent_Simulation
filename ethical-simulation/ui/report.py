@@ -30,6 +30,7 @@ class SimulationReportData:
     """UI-independent data needed to render one completed simulation."""
 
     framework_name: str
+    implementation: str
     total_deaths: int
     lane_changes_used: int
     max_lane_changes: int
@@ -120,6 +121,17 @@ class SimulationReportRenderer:
                 return label, value
         return "Framework", data.framework_name
 
+    @staticmethod
+    def _average_llm_latency(data: SimulationReportData) -> int | None:
+        latencies = [
+            float(record["latency_ms"])
+            for record in data.decision_history
+            if isinstance(record.get("latency_ms"), (int, float))
+        ]
+        if not latencies:
+            return None
+        return int(round(sum(latencies) / len(latencies)))
+
     def draw(
         self,
         width: int,
@@ -141,7 +153,14 @@ class SimulationReportRenderer:
         )
         self._draw_text(
             "report_subtitle",
-            "POST-SIMULATION ETHICAL ANALYSIS",
+            (
+                "POST-SIMULATION ETHICAL ANALYSIS  ·  IMPLEMENTATION: "
+                + (
+                    "LLM AGENT"
+                    if data.implementation == "llm-agent"
+                    else "CODE"
+                )
+            ),
             width / 2,
             height - 57,
             color=MUTED,
@@ -156,9 +175,8 @@ class SimulationReportRenderer:
         summary_height = 60.0 if compact else 76.0
         summary_top = height - 77.0
         summary_bottom = summary_top - summary_height
-        summary_width = (content_width - gap * 3) / 4
         metric_label, metric_value = self._specific_metric(data)
-        summaries = (
+        summaries = [
             ("TOTAL DEATHS", str(data.total_deaths), (239, 68, 68)),
             (
                 "LANE CHANGES",
@@ -171,7 +189,19 @@ class SimulationReportRenderer:
                 (59, 130, 246),
             ),
             (metric_label.upper(), metric_value, (34, 197, 94)),
-        )
+        ]
+        average_latency = self._average_llm_latency(data)
+        if data.implementation == "llm-agent":
+            summaries.append(
+                (
+                    "AVG LLM TIME",
+                    f"{average_latency} ms" if average_latency is not None else "N/A",
+                    (168, 85, 247),
+                )
+            )
+        summary_width = (
+            content_width - gap * (len(summaries) - 1)
+        ) / len(summaries)
         for index, (label, value, accent) in enumerate(summaries):
             left = margin + index * (summary_width + gap)
             self._draw_panel(
@@ -395,14 +425,20 @@ class SimulationReportRenderer:
     @staticmethod
     def _decision_detail(record: DecisionRecord) -> str:
         details = record.get("framework_details", {})
+        if details.get("lane_change_blocked"):
+            return "Lane change unavailable: maximum reached"
+        if record.get("mode") == "llm-agent":
+            suffix = " · FALLBACK" if record.get("fallback") else ""
+            return (
+                f"LLM: {record.get('model', 'Unknown')} · "
+                f"{record.get('latency_ms', '?')} ms{suffix}"
+            )
         if details.get("deciding_rule"):
             return f"Rule: {details['deciding_rule']}"
         if details.get("moral_conflict"):
             return f"Conflict resolver: {details.get('conflict_resolver', 'Unknown')}"
         if details.get("rule_outcome"):
             return f"Rule outcome: {details['rule_outcome']}"
-        if details.get("lane_change_blocked"):
-            return "Lane change unavailable: maximum reached"
         return ""
 
     def _draw_history(
@@ -478,12 +514,19 @@ class SimulationReportRenderer:
 
             detail = self._decision_detail(record)
             if detail:
+                detail_color = (
+                    (248, 113, 113)
+                    if record.get("framework_details", {}).get(
+                        "lane_change_blocked"
+                    )
+                    else (96, 165, 250)
+                )
                 self._draw_text(
                     f"history_{index}_framework",
                     detail,
                     text_left,
                     top - 20 - 4 * line_step,
-                    color=(96, 165, 250),
+                    color=detail_color,
                     font_size=8,
                     bold=True,
                 )

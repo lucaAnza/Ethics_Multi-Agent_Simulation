@@ -7,7 +7,19 @@ import webbrowser
 import arcade
 import arcade.gui
 
-from ethics.base import CHANGE_LANE, STAY, EthicalDecision
+from decision_engine import (
+    DRIVING,
+    EXECUTING_DECISION,
+    WAITING_FOR_LLM,
+    CodeDecisionEngine,
+    LLMDecisionEngine,
+)
+from ethics.base import (
+    CHANGE_LANE,
+    STAY,
+    DecisionContext as EthicalDecisionContext,
+    EthicalDecision,
+)
 from ethics.utilitarian import DEFAULT_ENTITIES_VALUES
 from ethics.constant import (
     CONFLICT_RESOLVERS,
@@ -15,11 +27,13 @@ from ethics.constant import (
     ConstantFramework,
 )
 from ethics.kant import KantFramework
-from ethics.ross import RossFramework
 from ethics.rules import DEFAULT_RULE_ENABLED, DEFAULT_RULE_ORDER, MORAL_RULES
 from ethics.utilitarian import UtilitarianFramework
+from ethics.virtue import VirtueEthicsFramework
+from llm import GeminiClient, PromptBuilder
+from llm.errors import safe_error_message
 from scenarios import load_scenario_definitions, save_scenario_definitions
-from simulation import World
+from simulation import DetectedIncident, World
 from simulation.entities import Pedestrian
 from ui.report import SimulationReportData, SimulationReportRenderer
 from ui.screens import (
@@ -38,8 +52,47 @@ SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 800
 TOOLBAR_HEIGHT = 72
 
-FRAMEWORKS = ["Utilitarianism", "Kant", "Constant", "Ross", "Virtue Ethics"]
+CODE_MODE = "code"
+LLM_MODE = "llm-agent"
+FRAMEWORK_IMPLEMENTATIONS = {
+    "Utilitarianism": (CODE_MODE, LLM_MODE),
+    "Kant": (CODE_MODE, LLM_MODE),
+    "Constant": (CODE_MODE, LLM_MODE),
+    "Virtue Ethics": (LLM_MODE,),
+}
+FRAMEWORKS = list(FRAMEWORK_IMPLEMENTATIONS)
+LLM_FRAMEWORKS = {
+    framework_name
+    for framework_name, implementations in FRAMEWORK_IMPLEMENTATIONS.items()
+    if LLM_MODE in implementations
+}
+FRAMEWORK_OPTIONS = [
+    f"{framework_name} ({implementation})"
+    for framework_name, implementations in FRAMEWORK_IMPLEMENTATIONS.items()
+    for implementation in implementations
+]
 GITHUB_REPOSITORY = "https://github.com/lucaAnza/Ethics_Multi-Agent_Simulation"
+
+REPORT_BUTTON_STYLE = {
+    "normal": arcade.gui.UIFlatButton.UIStyle(
+        bg=(251, 146, 60),
+        font_color=(31, 41, 55),
+    ),
+    "hover": arcade.gui.UIFlatButton.UIStyle(
+        bg=(253, 186, 116),
+        font_color=(31, 41, 55),
+        border=(255, 237, 213),
+        border_width=1,
+    ),
+    "press": arcade.gui.UIFlatButton.UIStyle(
+        bg=(234, 88, 12),
+        font_color=(255, 247, 237),
+    ),
+    "disabled": arcade.gui.UIFlatButton.UIStyle(
+        bg=(120, 85, 58),
+        font_color=(203, 213, 225),
+    ),
+}
 
 
 class SimulationWindow(arcade.Window):
@@ -52,6 +105,8 @@ class SimulationWindow(arcade.Window):
         )
         self.set_minimum_size(1150, 500)
         self.current_framework = "Utilitarianism"
+        self.current_implementation = CODE_MODE
+        self.framework_editor_mode = CODE_MODE
         self.scenario_definitions = load_scenario_definitions()
         self.scenario_names = list(self.scenario_definitions)
         self.current_scenario = (
@@ -67,6 +122,9 @@ class SimulationWindow(arcade.Window):
         self.max_spostamenti = 2
         self.simulation_finished = False
         self.last_decision: EthicalDecision | None = None
+        self.decision_phase = DRIVING
+        self.decision_sequence = 0
+        self.pending_world_context: DetectedIncident | None = None
 
         self.world = World(
             self.width,
@@ -105,9 +163,18 @@ class SimulationWindow(arcade.Window):
                 ],
                 entity_values=self.framework_settings["Utilitarianism"],
             ),
-            "Ross": RossFramework(),
+            "Virtue Ethics": VirtueEthicsFramework(),
         }
+        self.llm_additional_instructions = {
+            framework_name: "" for framework_name in sorted(LLM_FRAMEWORKS)
+        }
+        self.code_decision_engine = CodeDecisionEngine()
+        self.llm_decision_engine = LLMDecisionEngine(
+            client=GeminiClient(),
+            prompt_builder=PromptBuilder(),
+        )
         self.utilitarian_entity_inputs: dict[str, arcade.gui.UIInputText] = {}
+        self.llm_additional_instructions_input: arcade.gui.UIInputText | None = None
         self.framework_status_label: arcade.gui.UILabel | None = None
         self.scenario_initial_speeds = {
             name: float(definition["cars"][0]["speed"])
@@ -137,6 +204,7 @@ class SimulationWindow(arcade.Window):
         self._hud_texts = self._create_hud_texts()
         self._perception_texts = self._create_perception_texts()
         self._end_texts = self._create_end_texts()
+        self._llm_loading_texts = self._create_llm_loading_texts()
         self.report_renderer = SimulationReportRenderer()
         self.report_page = 0
         self.manager = arcade.gui.UIManager()
@@ -181,9 +249,12 @@ class SimulationWindow(arcade.Window):
         selection_controls = arcade.gui.UIBoxLayout(vertical=False, space_between=5)
         framework = selection_controls.add(
             arcade.gui.UIDropdown(
-                default=self.current_framework,
-                options=FRAMEWORKS,
-                width=130,
+                default=self._framework_option(
+                    self.current_framework,
+                    self.current_implementation,
+                ),
+                options=FRAMEWORK_OPTIONS,
+                width=185,
                 height=34,
             )
         )
@@ -195,7 +266,7 @@ class SimulationWindow(arcade.Window):
                 height=34,
             )
         )
-        row.add(section("FRAMEWORK / SIMULATION", selection_controls, 240))
+        row.add(section("FRAMEWORK / SIMULATION", selection_controls, 295))
         row.add(separator())
 
         playback_controls = arcade.gui.UIBoxLayout(vertical=False, space_between=5)
@@ -312,17 +383,42 @@ class SimulationWindow(arcade.Window):
 
     def _framework_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
         if event.new_value is not None:
-            self.current_framework = event.new_value
+            framework_name, implementation = self._parse_framework_option(
+                str(event.new_value)
+            )
+            self._cancel_pending_decision()
+            self.current_framework = framework_name
+            self.current_implementation = implementation
             self.last_decision = None
+
+    @staticmethod
+    def _framework_option(framework_name: str, implementation: str) -> str:
+        return f"{framework_name} ({implementation})"
+
+    @staticmethod
+    def _parse_framework_option(option: str) -> tuple[str, str]:
+        for implementation in (LLM_MODE, CODE_MODE):
+            suffix = f" ({implementation})"
+            if option.endswith(suffix):
+                framework_name = option[: -len(suffix)]
+                if framework_name in FRAMEWORKS:
+                    allowed = FRAMEWORK_IMPLEMENTATIONS[framework_name]
+                    if implementation in allowed:
+                        return framework_name, implementation
+                    return framework_name, allowed[0]
+        return "Utilitarianism", CODE_MODE
 
     def _reset_framework_state(self) -> None:
         for framework in self.ethical_frameworks.values():
             framework.reset()
 
     def _reset_run_state(self) -> None:
+        self._cancel_pending_decision()
         self.is_running = False
         self.simulation_finished = False
         self.last_decision = None
+        self.decision_sequence = 0
+        self.decision_phase = DRIVING
         self._reset_framework_state()
 
     def _scenario_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
@@ -399,17 +495,118 @@ class SimulationWindow(arcade.Window):
         self.is_running = False
 
     def _maybe_trigger_ethical_decision(self) -> None:
-        context = self.world.next_decision_context()
-        if context is None:
+        world_context = self.world.next_decision_context()
+        if world_context is None:
             return
-        framework = self.ethical_frameworks.get(self.current_framework)
-        decision = (
-            framework.decide(context.state)
-            if framework is not None
-            else EthicalDecision(STAY, "No active framework; keeping the current lane")
+        car = self.world.primary_car
+        context = EthicalDecisionContext.from_state(
+            decision_id=self.decision_sequence + 1,
+            vehicle_position=car.x if car is not None else 0.0,
+            state=world_context.state,
+            lane_changes_remaining=self.world.lane_changes_remaining,
         )
+        framework = self.ethical_frameworks.get(self.current_framework)
+        if self.current_implementation == LLM_MODE:
+            try:
+                started = self.llm_decision_engine.submit(
+                    framework_name=self.current_framework,
+                    framework_settings=self._llm_framework_settings(
+                        self.current_framework
+                    ),
+                    additional_instructions=self.llm_additional_instructions.get(
+                        self.current_framework,
+                        "",
+                    ),
+                    context=context,
+                )
+            except Exception as error:
+                error_message = safe_error_message(error)
+                decision = EthicalDecision(
+                    STAY,
+                    (
+                        f"LLM Agent could not start: {error_message}. "
+                        "Safe fallback selected STAY."
+                    ),
+                    {
+                        "mode": LLM_MODE,
+                        "model": self.llm_decision_engine.model_name,
+                        "latency_ms": 0,
+                        "fallback": True,
+                        "attempts": 0,
+                        "llm_error": error_message,
+                    },
+                )
+                self._apply_ethical_decision(
+                    world_context,
+                    self.current_framework,
+                    context,
+                    decision,
+                )
+                return
+            if started:
+                self.pending_world_context = world_context
+                self.decision_phase = WAITING_FOR_LLM
+            return
+
+        if framework is None:
+            decision = EthicalDecision(
+                STAY,
+                "No active framework; keeping the current lane",
+                {"mode": CODE_MODE},
+            )
+        else:
+            decision = self.code_decision_engine.decide(framework, context)
+        self._apply_ethical_decision(
+            world_context,
+            self.current_framework,
+            context,
+            decision,
+        )
+
+    def _llm_framework_settings(self, framework_name: str) -> dict:
+        """Return only the selected framework's structured configuration."""
+        if framework_name == "Utilitarianism":
+            return {
+                "entity_values": deepcopy(
+                    self.framework_settings["Utilitarianism"]
+                )
+            }
+        settings = deepcopy(self.framework_settings.get(framework_name, {}))
+        if framework_name == "Constant":
+            settings["entity_values"] = deepcopy(
+                self.framework_settings["Utilitarianism"]
+            )
+        return settings
+
+    def _poll_llm_decision(self) -> None:
+        result = self.llm_decision_engine.poll()
+        if result is None:
+            return
+        world_context = self.pending_world_context
+        self.pending_world_context = None
+        if world_context is None:
+            self.decision_phase = DRIVING
+            return
+        self._apply_ethical_decision(
+            world_context,
+            result.framework_name,
+            result.context,
+            result.decision,
+        )
+
+    def _apply_ethical_decision(
+        self,
+        world_context: DetectedIncident,
+        framework_name: str,
+        context: EthicalDecisionContext,
+        decision: EthicalDecision,
+    ) -> None:
         if decision.action not in {STAY, CHANGE_LANE}:
-            decision = EthicalDecision(STAY, "Invalid framework action; staying in lane")
+            decision = EthicalDecision(
+                STAY,
+                "Invalid decision action; safe fallback selected STAY.",
+                {**decision.details, "fallback": True},
+            )
 
         actual_decision = decision
         lane_change_started = False
@@ -426,30 +623,40 @@ class SimulationWindow(arcade.Window):
                     },
                 )
 
-        self.world.mark_decision_handled(context)
+        self.world.mark_decision_handled(world_context)
+        self.decision_sequence = context.decision_id
+        framework = self.ethical_frameworks.get(framework_name)
         if framework is not None:
-            car = self.world.primary_car
             framework.record_decision(
                 actual_decision,
-                position_x=car.x if car is not None else 0.0,
-                state=context.state,
+                context=context,
             )
         self.last_decision = actual_decision
+        self.decision_phase = (
+            EXECUTING_DECISION if lane_change_started else DRIVING
+        )
 
-        print(f"\n[ETHICAL DECISION] Framework: {self.current_framework}")
+        print(f"\n[ETHICAL DECISION] Framework: {framework_name}")
+        print(f"  Implementation: {actual_decision.details.get('mode', CODE_MODE)}")
         print(
             "  Current lane entities: "
-            f"{len(context.state['current_lane_entities'])}"
+            f"{len(context.current_lane_entities)}"
         )
         print(
             "  Other lane entities: "
-            f"{len(context.state['other_lane_entities'])}"
+            f"{len(context.other_lane_entities)}"
         )
         print(f"  Framework action: {decision.action}")
         print(f"  Applied action: {actual_decision.action}")
         print(f"  Reason: {actual_decision.reason}")
         if decision.action == CHANGE_LANE and not lane_change_started:
             print("  Lane change unavailable: max_spostamenti reached.")
+
+    def _cancel_pending_decision(self) -> None:
+        if hasattr(self, "llm_decision_engine"):
+            self.llm_decision_engine.cancel()
+        self.pending_world_context = None
+        self.decision_phase = DRIVING
 
     def _stop(self, _event: arcade.gui.UIOnClickEvent) -> None:
         self.world.reset()
@@ -464,6 +671,7 @@ class SimulationWindow(arcade.Window):
     def _show_simulation_end(self) -> None:
         self.is_running = False
         self.simulation_finished = True
+        self.decision_phase = DRIVING
         self.manager.clear()
         self._setup_simulation_end_actions()
 
@@ -473,7 +681,7 @@ class SimulationWindow(arcade.Window):
             text="Report",
             width=160,
             height=42,
-            style=arcade.gui.UIFlatButton.STYLE_BLUE,
+            style=REPORT_BUTTON_STYLE,
         )
         report_button.on_click = self._open_report
         reset_button = arcade.gui.UIFlatButton(
@@ -534,6 +742,7 @@ class SimulationWindow(arcade.Window):
         metrics = framework.summary(casualties) if framework is not None else []
         return SimulationReportData(
             framework_name=self.current_framework,
+            implementation=self.current_implementation,
             total_deaths=len(dead),
             lane_changes_used=self.world.lane_changes_used,
             max_lane_changes=self.world.max_spostamenti,
@@ -621,17 +830,29 @@ class SimulationWindow(arcade.Window):
             if self.current_framework in FRAMEWORKS
             else "Utilitarianism"
         )
+        self.framework_editor_mode = (
+            self.current_implementation if selected in LLM_FRAMEWORKS else CODE_MODE
+        )
         self._show_framework_editor(selected)
 
     def _show_framework_editor(self, framework_name: str) -> None:
         self.active_screen = "framework_settings"
+        self.framework_editor_framework = framework_name
+        allowed_implementations = FRAMEWORK_IMPLEMENTATIONS.get(
+            framework_name,
+            (CODE_MODE,),
+        )
+        if self.framework_editor_mode not in allowed_implementations:
+            self.framework_editor_mode = allowed_implementations[0]
         self.manager.clear()
         (
             self.utilitarian_entity_inputs,
+            self.llm_additional_instructions_input,
             self.framework_status_label,
         ) = build_framework_settings(
             self.manager,
             selected=framework_name,
+            selected_mode=self.framework_editor_mode,
             utilitarian_entity_values=self.framework_settings["Utilitarianism"],
             kant_rules=self._framework_rule_rows("Kant"),
             constant_rules=self._framework_rule_rows("Constant"),
@@ -639,13 +860,56 @@ class SimulationWindow(arcade.Window):
                 "conflict_resolution"
             ],
             conflict_resolvers=list(CONFLICT_RESOLVERS),
+            llm_additional_instructions=self.llm_additional_instructions.get(
+                framework_name,
+                "",
+            ),
+            llm_model=self.llm_decision_engine.model_name,
             on_select=self._show_framework_editor,
+            on_select_mode=self._set_framework_editor_mode,
             on_save=self._save_utilitarian_settings,
+            on_save_llm=self._save_llm_instructions,
             on_toggle_rule=self._toggle_framework_rule,
             on_move_kant_rule=self._move_kant_rule,
             on_constant_resolver=self._set_constant_conflict_resolver,
             on_back=self._open_menu,
         )
+
+    def _set_framework_editor_mode(self, implementation: str) -> None:
+        if implementation not in {CODE_MODE, LLM_MODE}:
+            return
+        framework_name = getattr(
+            self,
+            "framework_editor_framework",
+            self.current_framework,
+        )
+        if implementation not in FRAMEWORK_IMPLEMENTATIONS.get(framework_name, ()):
+            return
+        self.framework_editor_mode = implementation
+        self._show_framework_editor(framework_name)
+
+    def _save_llm_instructions(
+        self,
+        _event: arcade.gui.UIOnClickEvent | None = None,
+    ) -> None:
+        framework_name = getattr(
+            self,
+            "framework_editor_framework",
+            self.current_framework,
+        )
+        if (
+            framework_name not in LLM_FRAMEWORKS
+            or self.llm_additional_instructions_input is None
+        ):
+            return
+        self.llm_additional_instructions[framework_name] = (
+            self.llm_additional_instructions_input.text.strip()
+        )
+        if self.framework_status_label is not None:
+            self.framework_status_label.text = (
+                "Additional Instructions saved in application state."
+            )
+            self.framework_status_label.update_font(font_color=(74, 222, 128))
 
     def _framework_rule_rows(
         self,
@@ -1033,12 +1297,29 @@ class SimulationWindow(arcade.Window):
         if self.active_screen != "simulation":
             return
 
-        if self.is_running:
-            scaled_delta_time = delta_time * self.time_scale
+        if not self.is_running:
+            return
+
+        if self.decision_phase == WAITING_FOR_LLM:
+            # Virtual time is intentionally frozen while the provider works.
+            self._poll_llm_decision()
+            return
+
+        scaled_delta_time = delta_time * self.time_scale
+        if self.decision_phase == DRIVING:
             self._maybe_trigger_ethical_decision()
-            reached_tunnel = self.world.update(scaled_delta_time)
-            if reached_tunnel and not self.simulation_finished:
-                self._show_simulation_end()
+            if self.decision_phase == WAITING_FOR_LLM:
+                return
+
+        reached_tunnel = self.world.update(scaled_delta_time)
+        car = self.world.primary_car
+        if (
+            self.decision_phase == EXECUTING_DECISION
+            and (car is None or not car.is_changing_lane)
+        ):
+            self.decision_phase = DRIVING
+        if reached_tunnel and not self.simulation_finished:
+            self._show_simulation_end()
 
     def on_draw(self) -> None:
         self.clear()
@@ -1126,6 +1407,8 @@ class SimulationWindow(arcade.Window):
         )
         self._draw_vehicle_perception()
         self._draw_vehicle_hud()
+        if self.decision_phase == WAITING_FOR_LLM:
+            self._draw_llm_loading_overlay()
         if self.simulation_finished:
             self._draw_simulation_end_overlay()
         self.manager.draw()
@@ -1329,6 +1612,61 @@ class SimulationWindow(arcade.Window):
             )
         return texts
 
+    @staticmethod
+    def _create_llm_loading_texts() -> dict[str, arcade.Text]:
+        return {
+            "title": arcade.Text(
+                "ANALYZING ETHICAL DILEMMA...",
+                0,
+                0,
+                (255, 237, 170),
+                14,
+                anchor_x="center",
+                anchor_y="center",
+                bold=True,
+            ),
+            "subtitle": arcade.Text(
+                "",
+                0,
+                0,
+                (203, 213, 225),
+                9,
+                anchor_x="center",
+                anchor_y="center",
+            ),
+        }
+
+    def _draw_llm_loading_overlay(self) -> None:
+        panel_width = 430.0
+        panel_height = 96.0
+        left = (self.width - panel_width) / 2
+        bottom = (self.height - panel_height) / 2
+        arcade.draw_lbwh_rectangle_filled(
+            left,
+            bottom,
+            panel_width,
+            panel_height,
+            (24, 32, 42, 242),
+        )
+        arcade.draw_lbwh_rectangle_outline(
+            left,
+            bottom,
+            panel_width,
+            panel_height,
+            (249, 166, 35),
+            2,
+        )
+        title = self._llm_loading_texts["title"]
+        title.x, title.y = self.width / 2, bottom + 60
+        title.draw()
+        subtitle = self._llm_loading_texts["subtitle"]
+        subtitle.text = (
+            f"{self.current_framework} · {self.llm_decision_engine.model_name} "
+            "· simulation time paused"
+        )
+        subtitle.x, subtitle.y = self.width / 2, bottom + 31
+        subtitle.draw()
+
     def _draw_simulation_end_overlay(self) -> None:
         dead = self.world.dead_pedestrians()
         panel_width = 520
@@ -1390,6 +1728,14 @@ class SimulationWindow(arcade.Window):
         if category_counts.get("Custom", 0):
             summary_lines.append(f"Custom: {category_counts['Custom']}")
         summary_lines.append(f"Framework: {self.current_framework}")
+        summary_lines.append(
+            "Implementation: "
+            + (
+                "LLM Agent"
+                if self.current_implementation == LLM_MODE
+                else "Code"
+            )
+        )
 
         framework = self.ethical_frameworks.get(self.current_framework)
         casualties = [
@@ -1650,6 +1996,7 @@ class SimulationWindow(arcade.Window):
             self._setup_report_navigation()
 
     def on_close(self) -> None:
+        self.llm_decision_engine.close()
         self.manager.disable()
         super().on_close()
 
