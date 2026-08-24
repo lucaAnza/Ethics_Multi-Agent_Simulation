@@ -53,7 +53,7 @@ class LLMDecisionEngine:
         *,
         client: LLMClient,
         prompt_builder: PromptBuilder,
-        timeout_seconds: float = 8.0,
+        timeout_seconds: float = 30.0,
         max_attempts: int = 2,
     ) -> None:
         self.client = client

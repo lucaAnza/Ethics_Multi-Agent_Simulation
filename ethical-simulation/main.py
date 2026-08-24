@@ -2,10 +2,12 @@
 
 from copy import deepcopy
 import math
+from pathlib import Path
 import webbrowser
 
 import arcade
 import arcade.gui
+from dotenv import load_dotenv
 
 from decision_engine import (
     DRIVING,
@@ -47,6 +49,9 @@ from ui.screens import (
     build_report_navigation,
     build_scenario_settings,
 )
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+load_dotenv(PROJECT_ROOT / ".env")
 
 SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 800

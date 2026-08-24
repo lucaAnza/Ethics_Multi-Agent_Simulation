@@ -14,14 +14,23 @@ pip install -r requirements.txt
 python main.py
 ```
 
-To use an `llm-agent` implementation, configure the Gemini API key before
-starting the application:
+To use an `llm-agent` implementation, set the Gemini API key in the local
+`ethical-simulation/.env` file loaded automatically by `main.py`:
 
-```bash
-export GEMINI_API_KEY="your-api-key"
+```dotenv
+GEMINI_API_KEY=your-api-key
 ```
 
 Deterministic `code` implementations do not require an API key.
+
+The standalone connectivity check can be run without starting Arcade:
+
+```bash
+python gemini_api_test.py
+```
+
+It loads the same `.env`, performs one structured request, and prints latency,
+the validated JSON response, or the provider error.
 
 ## Simulation flow
 
