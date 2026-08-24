@@ -262,8 +262,15 @@ def build_framework_settings(
     *,
     selected: str,
     utilitarian_entity_values: dict[str, float],
+    kant_rules: list[tuple[str, str, bool]],
+    constant_rules: list[tuple[str, str, bool]],
+    constant_conflict_resolution: str,
+    conflict_resolvers: list[str],
     on_select: Callable[[str], None],
     on_save: Callable,
+    on_toggle_rule: Callable[[str, str], None],
+    on_move_kant_rule: Callable[[str, int], None],
+    on_constant_resolver: Callable[[str], None],
     on_back: Callable,
 ) -> tuple[dict[str, arcade.gui.UIInputText], arcade.gui.UILabel]:
     framework_list = arcade.gui.UIBoxLayout(vertical=True, space_between=7)
@@ -382,6 +389,136 @@ def build_framework_settings(
         editor.add(ranking_layout)
         editor.add(status)
         editor.add(_button("Save Values", on_save, 180, variant="save"))
+    elif selected in {"Kant", "Constant"}:
+        is_kant = selected == "Kant"
+        editor.add(
+            _heading(
+                selected.upper(),
+                (
+                    "ENABLED RULES ARE EVALUATED BY PRIORITY"
+                    if is_kant
+                    else "ENABLED RULES HAVE THE SAME MORAL WEIGHT"
+                ),
+                490,
+            )
+        )
+        editor.add(
+            arcade.gui.UILabel(
+                text=(
+                    "Move rules up or down to define which principle prevails."
+                    if is_kant
+                    else "Conflicting votes are delegated to the selected resolver."
+                ),
+                width=490,
+                height=30,
+                font_size=10,
+                text_color=MUTED,
+            )
+        )
+
+        rules = kant_rules if is_kant else constant_rules
+        rule_list = arcade.gui.UIBoxLayout(vertical=True, space_between=6)
+        for index, (rule_key, rule_label, enabled) in enumerate(rules):
+            row = arcade.gui.UIBoxLayout(
+                vertical=False,
+                space_between=6,
+                width=490,
+                height=42,
+                size_hint_min=(490, 42),
+                size_hint_max=(490, 42),
+            ).with_background(
+                color=(37, 51, 62, 220) if enabled else (38, 44, 53, 190)
+            )
+            if is_kant:
+                priority_holder, _priority_label = _fixed_label(
+                    f"{index + 1}.",
+                    width=28,
+                    font_size=10,
+                    bold=True,
+                    text_color=(96, 165, 250),
+                    anchor_x="right",
+                )
+                row.add(priority_holder)
+                label_width = 274
+            else:
+                row.add(arcade.gui.UIWidget(width=8, height=36))
+                label_width = 344
+
+            rule_holder, _rule_label = _fixed_label(
+                rule_label,
+                width=label_width,
+                font_size=10,
+                text_color=TEXT if enabled else MUTED,
+            )
+            row.add(rule_holder)
+            toggle_button = row.add(
+                _button(
+                    "ON" if enabled else "OFF",
+                    lambda _event: None,
+                    66,
+                    variant="save" if enabled else "default",
+                    height=32,
+                )
+            )
+            toggle_button.on_click = (
+                lambda _event, framework=selected, key=rule_key: on_toggle_rule(
+                    framework,
+                    key,
+                )
+            )
+
+            if is_kant:
+                up_button = row.add(
+                    _button("^", lambda _event: None, 38, height=32)
+                )
+                down_button = row.add(
+                    _button("v", lambda _event: None, 38, height=32)
+                )
+                up_button.disabled = index == 0
+                down_button.disabled = index == len(rules) - 1
+                up_button.on_click = (
+                    lambda _event, key=rule_key: on_move_kant_rule(key, -1)
+                )
+                down_button.on_click = (
+                    lambda _event, key=rule_key: on_move_kant_rule(key, 1)
+                )
+            rule_list.add(row)
+
+        editor.add(rule_list)
+        if not is_kant:
+            resolver_row = arcade.gui.UIBoxLayout(
+                vertical=False,
+                space_between=10,
+                width=490,
+                height=38,
+            )
+            resolver_holder, _resolver_label = _fixed_label(
+                "Conflict resolution:",
+                width=178,
+                font_size=11,
+                bold=True,
+            )
+            resolver_row.add(resolver_holder)
+            resolver_dropdown = resolver_row.add(
+                arcade.gui.UIDropdown(
+                    default=constant_conflict_resolution,
+                    options=conflict_resolvers,
+                    width=250,
+                    height=34,
+                )
+            )
+
+            def resolver_changed(event: arcade.gui.UIOnChangeEvent) -> None:
+                if event.new_value is not None:
+                    on_constant_resolver(str(event.new_value))
+
+            resolver_dropdown.on_change = resolver_changed
+            editor.add(arcade.gui.UIWidget(width=490, height=3))
+            editor.add(resolver_row)
+
+        status.text = "Changes are applied immediately to the simulation state."
+        status.update_font(font_color=(74, 222, 128))
+        editor.add(status)
     else:
         editor.add(_heading(selected.upper(), "FRAMEWORK SETTINGS", 490))
         editor.add(arcade.gui.UIWidget(width=490, height=24))

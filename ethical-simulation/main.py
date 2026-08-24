@@ -9,9 +9,14 @@ import arcade.gui
 
 from ethics.base import CHANGE_LANE, STAY, EthicalDecision
 from ethics.utilitarian import DEFAULT_ENTITIES_VALUES
-from ethics.constant import ConstantFramework
+from ethics.constant import (
+    CONFLICT_RESOLVERS,
+    UTILITARIAN_EVALUATION,
+    ConstantFramework,
+)
 from ethics.kant import KantFramework
 from ethics.ross import RossFramework
+from ethics.rules import DEFAULT_RULE_ENABLED, DEFAULT_RULE_ORDER, MORAL_RULES
 from ethics.utilitarian import UtilitarianFramework
 from scenarios import load_scenario_definitions, save_scenario_definitions
 from simulation import World
@@ -74,13 +79,30 @@ class SimulationWindow(arcade.Window):
         )
         self.framework_settings = {
             "Utilitarianism": dict(DEFAULT_ENTITIES_VALUES),
+            "Kant": {
+                "rule_order": list(DEFAULT_RULE_ORDER),
+                "enabled_rules": dict(DEFAULT_RULE_ENABLED),
+            },
+            "Constant": {
+                "enabled_rules": dict(DEFAULT_RULE_ENABLED),
+                "conflict_resolution": UTILITARIAN_EVALUATION,
+            },
         }
         self.ethical_frameworks = {
             "Utilitarianism": UtilitarianFramework(
                 self.framework_settings["Utilitarianism"]
             ),
-            "Kant": KantFramework(),
-            "Constant": ConstantFramework(),
+            "Kant": KantFramework(
+                rule_order=self.framework_settings["Kant"]["rule_order"],
+                enabled_rules=self.framework_settings["Kant"]["enabled_rules"],
+            ),
+            "Constant": ConstantFramework(
+                enabled_rules=self.framework_settings["Constant"]["enabled_rules"],
+                conflict_resolution=self.framework_settings["Constant"][
+                    "conflict_resolution"
+                ],
+                entity_values=self.framework_settings["Utilitarianism"],
+            ),
             "Ross": RossFramework(),
         }
         self.utilitarian_entity_inputs: dict[str, arcade.gui.UIInputText] = {}
@@ -491,10 +513,82 @@ class SimulationWindow(arcade.Window):
             self.manager,
             selected=framework_name,
             utilitarian_entity_values=self.framework_settings["Utilitarianism"],
+            kant_rules=self._framework_rule_rows("Kant"),
+            constant_rules=self._framework_rule_rows("Constant"),
+            constant_conflict_resolution=self.framework_settings["Constant"][
+                "conflict_resolution"
+            ],
+            conflict_resolvers=list(CONFLICT_RESOLVERS),
             on_select=self._show_framework_editor,
             on_save=self._save_utilitarian_settings,
+            on_toggle_rule=self._toggle_framework_rule,
+            on_move_kant_rule=self._move_kant_rule,
+            on_constant_resolver=self._set_constant_conflict_resolver,
             on_back=self._open_menu,
         )
+
+    def _framework_rule_rows(
+        self,
+        framework_name: str,
+    ) -> list[tuple[str, str, bool]]:
+        settings = self.framework_settings[framework_name]
+        rule_order = (
+            settings["rule_order"]
+            if framework_name == "Kant"
+            else list(DEFAULT_RULE_ORDER)
+        )
+        enabled_rules = settings["enabled_rules"]
+        return [
+            (
+                rule_key,
+                MORAL_RULES[rule_key].label,
+                bool(enabled_rules[rule_key]),
+            )
+            for rule_key in rule_order
+        ]
+
+    def _toggle_framework_rule(
+        self,
+        framework_name: str,
+        rule_key: str,
+    ) -> None:
+        settings = self.framework_settings[framework_name]
+        enabled_rules = settings["enabled_rules"]
+        enabled_rules[rule_key] = not enabled_rules[rule_key]
+        self._apply_framework_rule_settings(framework_name)
+        self._show_framework_editor(framework_name)
+
+    def _move_kant_rule(self, rule_key: str, direction: int) -> None:
+        rule_order = self.framework_settings["Kant"]["rule_order"]
+        current_index = rule_order.index(rule_key)
+        target_index = max(0, min(len(rule_order) - 1, current_index + direction))
+        if target_index == current_index:
+            return
+        rule_order[current_index], rule_order[target_index] = (
+            rule_order[target_index],
+            rule_order[current_index],
+        )
+        self._apply_framework_rule_settings("Kant")
+        self._show_framework_editor("Kant")
+
+    def _set_constant_conflict_resolver(self, resolver: str) -> None:
+        self.framework_settings["Constant"]["conflict_resolution"] = resolver
+        self._apply_framework_rule_settings("Constant")
+        self._show_framework_editor("Constant")
+
+    def _apply_framework_rule_settings(self, framework_name: str) -> None:
+        settings = self.framework_settings[framework_name]
+        framework = self.ethical_frameworks[framework_name]
+        if isinstance(framework, KantFramework):
+            framework.configure_rules(
+                settings["rule_order"],
+                settings["enabled_rules"],
+            )
+        elif isinstance(framework, ConstantFramework):
+            framework.configure_rules(
+                settings["enabled_rules"],
+                settings["conflict_resolution"],
+            )
 
     def _save_utilitarian_settings(
         self, _event: arcade.gui.UIOnClickEvent | None = None
@@ -522,6 +616,8 @@ class SimulationWindow(arcade.Window):
         self.framework_settings["Utilitarianism"].update(parsed_values)
         utilitarian = self.ethical_frameworks["Utilitarianism"]
         utilitarian.update_entity_values(parsed_values)
+        constant = self.ethical_frameworks["Constant"]
+        constant.update_entity_values(parsed_values)
         self.framework_status_label.text = "Values saved in simulation state."
 
     def _open_scenario_settings(

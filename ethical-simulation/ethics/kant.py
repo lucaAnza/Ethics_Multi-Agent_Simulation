@@ -1,11 +1,70 @@
-from typing import Any
+"""Kantian framework using configurable rules with strict priority."""
 
-from .base import STAY, EthicalDecision, EthicalFramework
+from __future__ import annotations
+
+from .base import STAY, EthicalDecision, EthicalFramework, EntitySnapshot, PerceptionState
+from .rules import (
+    DEFAULT_RULE_ENABLED,
+    DEFAULT_RULE_ORDER,
+    MORAL_RULES,
+    evaluate_rule,
+    normalize_enabled_rules,
+    normalize_rule_order,
+)
 
 
 class KantFramework(EthicalFramework):
-    def decide(
+    """Apply the first applicable enabled rule in the configured hierarchy."""
+
+    def __init__(
         self,
-        state: dict[str, list[dict[str, Any]]],
-    ) -> EthicalDecision:
-        return EthicalDecision(STAY, "Kant placeholder keeps the current lane")
+        rule_order: list[str] | tuple[str, ...] = DEFAULT_RULE_ORDER,
+        enabled_rules: dict[str, bool] | None = None,
+    ) -> None:
+        self.rule_order = normalize_rule_order(rule_order)
+        self.enabled_rules = normalize_enabled_rules(
+            enabled_rules or DEFAULT_RULE_ENABLED
+        )
+        self.decision_history: list[list[str]] = []
+
+    def configure_rules(
+        self,
+        rule_order: list[str],
+        enabled_rules: dict[str, bool],
+    ) -> None:
+        """Replace the hierarchy and enabled state without affecting history."""
+        self.rule_order = normalize_rule_order(rule_order)
+        self.enabled_rules = normalize_enabled_rules(enabled_rules)
+
+    def decide(self, state: PerceptionState) -> EthicalDecision:
+        for rule_key in self.rule_order:
+            if not self.enabled_rules[rule_key]:
+                continue
+            action = evaluate_rule(rule_key, state)
+            if action is None:
+                continue
+            rule_label = MORAL_RULES[rule_key].label
+            return EthicalDecision(
+                action,
+                f'"{rule_label}" has higher priority.',
+            )
+
+        return EthicalDecision(
+            STAY,
+            "No enabled rule resolved the situation; defaulting to STAY.",
+        )
+
+    def record_decision(self, decision: EthicalDecision) -> None:
+        self.decision_history.append([decision.action, decision.reason])
+
+    def reset(self) -> None:
+        self.decision_history.clear()
+
+    def summary(
+        self,
+        casualties: list[EntitySnapshot],
+    ) -> list[tuple[str, str]]:
+        return [
+            ("Decisions", str(len(self.decision_history))),
+            ("Active rules", str(sum(self.enabled_rules.values()))),
+        ]

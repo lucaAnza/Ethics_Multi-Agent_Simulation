@@ -42,10 +42,19 @@ number of decisions retained in its in-memory history.
 ## Settings
 
 The **Menu** opens framework, scenario, general, and project-info screens.
-Utilitarian entity values can be edited in **Framework Settings**. **Scenario
-Settings** provides an editor for cars and pedestrians, including map-based
-placement and pedestrian movement. Saved scenarios are validated and loaded
-from `scenarios/scenario_settings.json` at startup.
+**Framework Settings** provides three configurable strategies:
 
-Kant, Constant, and Ross currently use placeholder strategies that always keep
-the current lane. General settings remains a placeholder.
+- **Utilitarianism** directly compares the configured casualty costs;
+- **Kant** applies enabled moral rules in a user-defined priority order;
+- **Constant** gives every enabled rule equal weight and delegates a moral
+  conflict to the selected resolver. The available resolver is currently
+  **Utilitarian evaluation**.
+
+All three frameworks keep their decision reasons in memory for the current run.
+Kant and Constant rule switches, Kant priority controls, and the Constant
+resolver are applied immediately to the simulation state.
+
+**Scenario Settings** provides an editor for cars and pedestrians, including
+map-based placement and pedestrian movement. Saved scenarios are validated and
+loaded from `scenarios/scenario_settings.json` at startup. Ross and General
+Settings remain placeholders.

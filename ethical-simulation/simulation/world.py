@@ -67,7 +67,7 @@ class World:
             "ADJACENT LANE VISION",
             0,
             0,
-            (116, 202, 240, 220),
+            (255, 166, 77, 235),
             8,
             anchor_x="left",
             anchor_y="center",
@@ -459,6 +459,74 @@ class World:
             arcade.draw_line(x, y, min(x + 18.0, end_x), y, color, width)
             x += 30.0
 
+    @staticmethod
+    def _draw_dashed_polyline(
+        points: list[tuple[float, float]],
+        color,
+        width: float = 3.0,
+        dash_length: float = 18.0,
+        gap_length: float = 10.0,
+    ) -> None:
+        """Draw evenly spaced dashes across connected line segments."""
+        if len(points) < 2:
+            return
+
+        drawing = True
+        pattern_remaining = dash_length
+        for start, end in zip(points, points[1:]):
+            delta_x = end[0] - start[0]
+            delta_y = end[1] - start[1]
+            segment_length = (delta_x**2 + delta_y**2) ** 0.5
+            if segment_length == 0:
+                continue
+
+            travelled = 0.0
+            while travelled < segment_length:
+                step = min(pattern_remaining, segment_length - travelled)
+                start_ratio = travelled / segment_length
+                end_ratio = (travelled + step) / segment_length
+                if drawing:
+                    arcade.draw_line(
+                        start[0] + delta_x * start_ratio,
+                        start[1] + delta_y * start_ratio,
+                        start[0] + delta_x * end_ratio,
+                        start[1] + delta_y * end_ratio,
+                        color,
+                        width,
+                    )
+                travelled += step
+                pattern_remaining -= step
+                if pattern_remaining <= 1e-6:
+                    drawing = not drawing
+                    pattern_remaining = dash_length if drawing else gap_length
+
+    @staticmethod
+    def _lane_vision_boundary(
+        start_x: float,
+        start_y: float,
+        target_x: float,
+        target_y: float,
+        end_x: float,
+    ) -> list[tuple[float, float]]:
+        """Create a smooth sensor-to-lane boundary followed by a straight rail."""
+        control_x = start_x + (target_x - start_x) * 0.7
+        points: list[tuple[float, float]] = []
+        for step in range(13):
+            progress = step / 12
+            inverse = 1.0 - progress
+            points.append(
+                (
+                    inverse**2 * start_x
+                    + 2 * inverse * progress * control_x
+                    + progress**2 * target_x,
+                    inverse**2 * start_y
+                    + 2 * inverse * progress * target_y
+                    + progress**2 * target_y,
+                )
+            )
+        points.append((end_x, target_y))
+        return points
+
     def _draw_vehicle_vision(self, car: Car) -> None:
         start_x = car.x + self.CAR_HALF_LENGTH + 4.0
         end_x = min(start_x + self.vision_distance, self.tunnel_x)
@@ -469,19 +537,29 @@ class World:
             self._draw_dashed_horizontal(start_x, end_x, y, vision_color)
 
         other_lane_y = self.lane_centers[1 - car.lane_index]
-        arcade.draw_lbwh_rectangle_filled(
-            start_x,
-            other_lane_y - self.LANE_HALF_WIDTH,
-            end_x - start_x,
-            self.LANE_HALF_WIDTH * 2,
-            (47, 150, 205, 42),
-        )
-        for y in (
+        transition_end_x = min(start_x + 58.0, end_x)
+        other_lane_color = (255, 125, 18, 235)
+        for target_y in (
             other_lane_y - self.LANE_HALF_WIDTH,
             other_lane_y + self.LANE_HALF_WIDTH,
         ):
-            self._draw_dashed_horizontal(start_x, end_x, y, (77, 178, 230, 150), 1.5)
-        self._other_lane_vision_text.x = start_x + 10
+            boundary = self._lane_vision_boundary(
+                start_x,
+                car.y,
+                transition_end_x,
+                target_y,
+                end_x,
+            )
+            self._draw_dashed_polyline(
+                boundary,
+                other_lane_color,
+                width=4.0,
+                dash_length=18.0,
+                gap_length=11.0,
+            )
+
+        label_x = min(transition_end_x + 10.0, end_x - 5.0)
+        self._other_lane_vision_text.x = label_x
         self._other_lane_vision_text.y = other_lane_y
         self._other_lane_vision_text.draw()
 

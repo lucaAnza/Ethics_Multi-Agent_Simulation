@@ -1,11 +1,9 @@
-from typing import Any
-
-from .base import STAY, EthicalDecision, EthicalFramework
+from .base import STAY, EthicalDecision, EthicalFramework, PerceptionState
 
 
 class RossFramework(EthicalFramework):
     def decide(
         self,
-        state: dict[str, list[dict[str, Any]]],
+        state: PerceptionState,
     ) -> EthicalDecision:
         return EthicalDecision(STAY, "Ross placeholder keeps the current lane")

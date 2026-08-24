@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeAlias
 
 
 STAY = "STAY"
 CHANGE_LANE = "CHANGE_LANE"
+
+EntitySnapshot: TypeAlias = dict[str, Any]
+PerceptionState: TypeAlias = dict[str, list[EntitySnapshot]]
 
 
 @dataclass(frozen=True)
@@ -21,7 +24,7 @@ class EthicalDecision:
 
 class EthicalFramework(ABC):
     @abstractmethod
-    def decide(self, state: dict[str, list[dict[str, Any]]]) -> EthicalDecision:
+    def decide(self, state: PerceptionState) -> EthicalDecision:
         """Choose between STAY and CHANGE_LANE from the two visible lanes."""
         raise NotImplementedError
 
@@ -31,6 +34,9 @@ class EthicalFramework(ABC):
     def reset(self) -> None:
         """Clear any per-simulation state owned by the framework."""
 
-    def summary(self, casualties: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    def summary(
+        self,
+        casualties: list[EntitySnapshot],
+    ) -> list[tuple[str, str]]:
         """Return framework-specific rows for the final summary."""
         return []

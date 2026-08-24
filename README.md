@@ -68,3 +68,4 @@ SCENARIO:
 2. Family person vs 4 child
 3. A familiar and 20 child
 4. A familiar and 1 child
+5. 2 person in my line vs 1 person in the other
