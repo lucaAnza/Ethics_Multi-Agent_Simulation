@@ -21,6 +21,7 @@ from ethics.utilitarian import UtilitarianFramework
 from scenarios import load_scenario_definitions, save_scenario_definitions
 from simulation import World
 from simulation.entities import Pedestrian
+from ui.report import SimulationReportData, SimulationReportRenderer
 from ui.screens import (
     ENTITY_MODEL_LABELS,
     PEDESTRIAN_ACTION_LABELS,
@@ -29,6 +30,7 @@ from ui.screens import (
     build_location_picker,
     build_menu,
     build_placeholder,
+    build_report_navigation,
     build_scenario_settings,
 )
 
@@ -135,6 +137,8 @@ class SimulationWindow(arcade.Window):
         self._hud_texts = self._create_hud_texts()
         self._perception_texts = self._create_perception_texts()
         self._end_texts = self._create_end_texts()
+        self.report_renderer = SimulationReportRenderer()
+        self.report_page = 0
         self.manager = arcade.gui.UIManager()
         self._setup_toolbar()
         self.manager.enable()
@@ -406,19 +410,30 @@ class SimulationWindow(arcade.Window):
         )
         if decision.action not in {STAY, CHANGE_LANE}:
             decision = EthicalDecision(STAY, "Invalid framework action; staying in lane")
-        if framework is not None:
-            # The history describes the ethical recommendation. Enforcement of
-            # the lane-change budget remains a simulation responsibility.
-            framework.record_decision(decision)
 
         actual_decision = decision
         lane_change_started = False
         if decision.action == CHANGE_LANE:
             lane_change_started = self.world.request_lane_change()
             if not lane_change_started:
-                actual_decision = EthicalDecision(STAY, decision.reason)
+                actual_decision = EthicalDecision(
+                    STAY,
+                    decision.reason,
+                    {
+                        **decision.details,
+                        "recommended_action": decision.action,
+                        "lane_change_blocked": True,
+                    },
+                )
 
         self.world.mark_decision_handled(context)
+        if framework is not None:
+            car = self.world.primary_car
+            framework.record_decision(
+                actual_decision,
+                position_x=car.x if car is not None else 0.0,
+                state=context.state,
+            )
         self.last_decision = actual_decision
 
         print(f"\n[ETHICAL DECISION] Framework: {self.current_framework}")
@@ -450,28 +465,133 @@ class SimulationWindow(arcade.Window):
         self.is_running = False
         self.simulation_finished = True
         self.manager.clear()
+        self._setup_simulation_end_actions()
 
+    def _setup_simulation_end_actions(self) -> None:
         panel_height = 350
+        report_button = arcade.gui.UIFlatButton(
+            text="Report",
+            width=160,
+            height=42,
+            style=arcade.gui.UIFlatButton.STYLE_BLUE,
+        )
+        report_button.on_click = self._open_report
         reset_button = arcade.gui.UIFlatButton(
             text="Reset",
-            width=190,
+            width=160,
             height=42,
             style=arcade.gui.UIFlatButton.STYLE_BLUE,
         )
         reset_button.on_click = self._reset_from_end
         anchor = arcade.gui.UIAnchorLayout()
         anchor.add(
+            report_button,
+            anchor_x="center",
+            anchor_y="center",
+            align_x=-88,
+            align_y=-panel_height / 2 + 54,
+        )
+        anchor.add(
             reset_button,
             anchor_x="center",
             anchor_y="center",
+            align_x=88,
             align_y=-panel_height / 2 + 54,
         )
         self.manager.add(anchor)
 
     def _reset_from_end(self, event: arcade.gui.UIOnClickEvent) -> None:
+        self.active_screen = "simulation"
         self._stop(event)
         self.manager.clear()
         self._setup_toolbar()
+
+    @staticmethod
+    def _casualty_category_counts(
+        dead: list[Pedestrian],
+    ) -> dict[str, int]:
+        counts = {"Child": 0, "Adult": 0, "Elderly": 0}
+        for person in dead:
+            if person.model in {"boy", "girl"}:
+                category = "Child"
+            elif person.model in {"old_man", "old_woman"}:
+                category = "Elderly"
+            elif person.model == "custom":
+                category = "Custom"
+            else:
+                category = "Adult"
+            counts[category] = counts.get(category, 0) + 1
+        return counts
+
+    def _build_report_data(self) -> SimulationReportData:
+        dead = self.world.dead_pedestrians()
+        casualties = [
+            {"model": person.model, "label": person.label}
+            for person in dead
+        ]
+        framework = self.ethical_frameworks.get(self.current_framework)
+        history = list(framework.decision_history) if framework is not None else []
+        metrics = framework.summary(casualties) if framework is not None else []
+        return SimulationReportData(
+            framework_name=self.current_framework,
+            total_deaths=len(dead),
+            lane_changes_used=self.world.lane_changes_used,
+            max_lane_changes=self.world.max_spostamenti,
+            casualty_counts=self._casualty_category_counts(dead),
+            decision_history=history,
+            framework_metrics=metrics,
+        )
+
+    def _open_report(
+        self,
+        _event: arcade.gui.UIOnClickEvent | None = None,
+    ) -> None:
+        if not self.simulation_finished:
+            return
+        self.active_screen = "report"
+        self.report_page = 0
+        self._setup_report_navigation()
+
+    def _setup_report_navigation(self) -> None:
+        data = self._build_report_data()
+        page_count = self.report_renderer.page_count(data, self.height)
+        self.report_page = max(0, min(self.report_page, page_count - 1))
+        self.manager.clear()
+        build_report_navigation(
+            self.manager,
+            page=self.report_page,
+            page_count=page_count,
+            on_previous=self._previous_report_page,
+            on_next=self._next_report_page,
+            on_back=self._back_to_summary,
+            on_restart=self._reset_from_end,
+        )
+
+    def _previous_report_page(
+        self,
+        _event: arcade.gui.UIOnClickEvent | None = None,
+    ) -> None:
+        self.report_page = max(0, self.report_page - 1)
+        self._setup_report_navigation()
+
+    def _next_report_page(
+        self,
+        _event: arcade.gui.UIOnClickEvent | None = None,
+    ) -> None:
+        page_count = self.report_renderer.page_count(
+            self._build_report_data(),
+            self.height,
+        )
+        self.report_page = min(page_count - 1, self.report_page + 1)
+        self._setup_report_navigation()
+
+    def _back_to_summary(
+        self,
+        _event: arcade.gui.UIOnClickEvent | None = None,
+    ) -> None:
+        self.active_screen = "simulation"
+        self.manager.clear()
+        self._setup_simulation_end_actions()
 
     def _open_menu(self, _event: arcade.gui.UIOnClickEvent | None = None) -> None:
         self._pause(None)
@@ -978,6 +1098,15 @@ class SimulationWindow(arcade.Window):
                 )
             self.manager.draw()
             return
+        if self.active_screen == "report":
+            self.report_renderer.draw(
+                self.width,
+                self.height,
+                self._build_report_data(),
+                self.report_page,
+            )
+            self.manager.draw()
+            return
         if self.active_screen != "simulation":
             self._draw_navigation_background()
             self.manager.draw()
@@ -1033,6 +1162,8 @@ class SimulationWindow(arcade.Window):
             if symbol == arcade.key.ESCAPE:
                 if self.active_screen == "scenario_location_picker":
                     self._cancel_scenario_location_picker()
+                elif self.active_screen == "report":
+                    self._back_to_summary()
                 elif self.active_screen == "menu":
                     self._return_to_simulation()
                 else:
@@ -1245,16 +1376,7 @@ class SimulationWindow(arcade.Window):
         status.x, status.y = center_x, panel_top - 72
         status.draw()
 
-        category_counts = {"Child": 0, "Adult": 0, "Elderly": 0, "Custom": 0}
-        for person in dead:
-            if person.model in {"boy", "girl"}:
-                category_counts["Child"] += 1
-            elif person.model in {"old_man", "old_woman"}:
-                category_counts["Elderly"] += 1
-            elif person.model == "custom":
-                category_counts["Custom"] += 1
-            else:
-                category_counts["Adult"] += 1
+        category_counts = self._casualty_category_counts(dead)
 
         summary_lines = [
             (
@@ -1265,7 +1387,7 @@ class SimulationWindow(arcade.Window):
             f"Adult: {category_counts['Adult']}",
             f"Elderly: {category_counts['Elderly']}",
         ]
-        if category_counts["Custom"]:
+        if category_counts.get("Custom", 0):
             summary_lines.append(f"Custom: {category_counts['Custom']}")
         summary_lines.append(f"Framework: {self.current_framework}")
 
@@ -1288,7 +1410,7 @@ class SimulationWindow(arcade.Window):
             detail.draw()
 
         hint = self._end_texts["hint"]
-        hint.text = "Click Reset to start a new simulation."
+        hint.text = "Open the report or reset to start a new simulation."
         hint.x, hint.y = center_x, panel_bottom + 24
         hint.draw()
 
@@ -1524,6 +1646,8 @@ class SimulationWindow(arcade.Window):
                 cursor_x,
                 cursor_y + preview.road_y - old_preview_road_y,
             )
+        if getattr(self, "active_screen", None) == "report":
+            self._setup_report_navigation()
 
     def on_close(self) -> None:
         self.manager.disable()

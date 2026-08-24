@@ -39,6 +39,13 @@ panel reports lane-change usage, victims grouped by category, and rows supplied
 by the active framework. Utilitarianism reports its total casualty malus and the
 number of decisions retained in its in-memory history.
 
+The final panel also opens a paginated **Simulation Report** containing summary
+cards, a casualty histogram, a lane-change usage pie chart, and the complete
+decision history. Every history record stores the vehicle position, descriptions
+of both visible lanes, the applied action, its reason, and optional
+framework-specific details such as a Kant rule or Constant conflict resolver.
+The report can return to the summary or restart the simulation directly.
+
 ## Settings
 
 The **Menu** opens framework, scenario, general, and project-info screens.

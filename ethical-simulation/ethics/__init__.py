@@ -5,6 +5,7 @@ from .base import (
     STAY,
     EthicalDecision,
     EthicalFramework,
+    DecisionRecord,
     EntitySnapshot,
     PerceptionState,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "STAY",
     "EthicalDecision",
     "EthicalFramework",
+    "DecisionRecord",
     "EntitySnapshot",
     "PerceptionState",
     "CONFLICT_RESOLVERS",

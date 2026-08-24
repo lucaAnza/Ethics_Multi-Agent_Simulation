@@ -28,12 +28,12 @@ class ConstantFramework(EthicalFramework):
         conflict_resolution: str = UTILITARIAN_EVALUATION,
         entity_values: Mapping[str, float] | None = None,
     ) -> None:
+        super().__init__()
         self.enabled_rules = normalize_enabled_rules(
             enabled_rules or DEFAULT_RULE_ENABLED
         )
         self.conflict_resolution = self._normalize_resolver(conflict_resolution)
         self.entity_values = dict(entity_values or DEFAULT_ENTITIES_VALUES)
-        self.decision_history: list[list[str]] = []
         self.moral_conflicts = 0
 
     @staticmethod
@@ -55,7 +55,7 @@ class ConstantFramework(EthicalFramework):
 
     def decide(self, state: PerceptionState) -> EthicalDecision:
         votes = [
-            action
+            (rule_key, action)
             for rule_key in DEFAULT_RULE_ORDER
             if self.enabled_rules[rule_key]
             if (action := evaluate_rule(rule_key, state)) is not None
@@ -66,12 +66,18 @@ class ConstantFramework(EthicalFramework):
                 "No enabled moral rule resolved the situation; defaulting to STAY.",
             )
 
-        distinct_actions = set(votes)
+        distinct_actions = {action for _rule_key, action in votes}
         if len(distinct_actions) == 1:
-            action = votes[0]
+            action = votes[0][1]
             return EthicalDecision(
                 action,
                 f"All applicable moral rules selected {action}.",
+                {
+                    "rule_outcome": "Unanimous",
+                    "supporting_rules": [
+                        rule_key for rule_key, _action in votes
+                    ],
+                },
             )
 
         current_entities = state.get("current_lane_entities", [])
@@ -91,15 +97,34 @@ class ConstantFramework(EthicalFramework):
                 "Moral rules conflicted. Utilitarian evaluation selected "
                 "the lower malus."
             )
-        return EthicalDecision(action, reason)
+        return EthicalDecision(
+            action,
+            reason,
+            {
+                "moral_conflict": True,
+                "conflict_resolver": self.conflict_resolution,
+                "current_lane_malus": current_cost,
+                "other_lane_malus": other_cost,
+            },
+        )
 
-    def record_decision(self, decision: EthicalDecision) -> None:
-        self.decision_history.append([decision.action, decision.reason])
-        if decision.reason.startswith("Moral rules conflicted."):
+    def record_decision(
+        self,
+        decision: EthicalDecision,
+        *,
+        position_x: float,
+        state: PerceptionState,
+    ) -> None:
+        super().record_decision(
+            decision,
+            position_x=position_x,
+            state=state,
+        )
+        if decision.details.get("moral_conflict"):
             self.moral_conflicts += 1
 
     def reset(self) -> None:
-        self.decision_history.clear()
+        super().reset()
         self.moral_conflicts = 0
 
     def summary(

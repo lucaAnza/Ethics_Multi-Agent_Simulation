@@ -561,6 +561,50 @@ def build_placeholder(
     _add_centered(manager, content)
 
 
+def build_report_navigation(
+    manager: arcade.gui.UIManager,
+    *,
+    page: int,
+    page_count: int,
+    on_previous: Callable,
+    on_next: Callable,
+    on_back: Callable,
+    on_restart: Callable,
+) -> None:
+    """Build report pagination and exit actions along the bottom edge."""
+    controls = arcade.gui.UIBoxLayout(vertical=False, space_between=8)
+    previous = controls.add(
+        _button("Previous", on_previous, 112, height=36)
+    )
+    page_holder, page_label = _fixed_label(
+        f"{page + 1} / {page_count}",
+        width=56,
+        height=36,
+        font_size=9,
+        bold=True,
+        text_color=MUTED,
+        anchor_x="center",
+    )
+    controls.add(page_holder)
+    next_button = controls.add(_button("Next", on_next, 112, height=36))
+    controls.add(arcade.gui.UIWidget(width=18, height=36))
+    controls.add(_button("Back to Summary", on_back, 176, variant="back", height=36))
+    controls.add(
+        _button(
+            "Restart Simulation",
+            on_restart,
+            184,
+            variant="save",
+            height=36,
+        )
+    )
+    previous.disabled = page <= 0
+    next_button.disabled = page >= page_count - 1
+    anchor = arcade.gui.UIAnchorLayout()
+    anchor.add(controls, anchor_x="center", anchor_y="bottom", align_y=12)
+    manager.add(anchor)
+
+
 def build_scenario_settings(
     manager: arcade.gui.UIManager,
     *,

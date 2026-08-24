@@ -21,11 +21,11 @@ class KantFramework(EthicalFramework):
         rule_order: list[str] | tuple[str, ...] = DEFAULT_RULE_ORDER,
         enabled_rules: dict[str, bool] | None = None,
     ) -> None:
+        super().__init__()
         self.rule_order = normalize_rule_order(rule_order)
         self.enabled_rules = normalize_enabled_rules(
             enabled_rules or DEFAULT_RULE_ENABLED
         )
-        self.decision_history: list[list[str]] = []
 
     def configure_rules(
         self,
@@ -47,18 +47,16 @@ class KantFramework(EthicalFramework):
             return EthicalDecision(
                 action,
                 f'"{rule_label}" has higher priority.',
+                {
+                    "deciding_rule": rule_label,
+                    "rule_key": rule_key,
+                },
             )
 
         return EthicalDecision(
             STAY,
             "No enabled rule resolved the situation; defaulting to STAY.",
         )
-
-    def record_decision(self, decision: EthicalDecision) -> None:
-        self.decision_history.append([decision.action, decision.reason])
-
-    def reset(self) -> None:
-        self.decision_history.clear()
 
     def summary(
         self,

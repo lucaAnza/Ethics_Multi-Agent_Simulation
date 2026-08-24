@@ -17,8 +17,8 @@ DEFAULT_ENTITIES_VALUES = {
 
 class UtilitarianFramework(EthicalFramework):
     def __init__(self, entity_values: dict[str, float] | None = None) -> None:
+        super().__init__()
         self.entity_values = dict(entity_values or DEFAULT_ENTITIES_VALUES)
-        self.decision_history: list[list[str]] = []
 
     def update_entity_values(self, values: dict[str, float]) -> None:
         self.entity_values.update(values)
@@ -36,13 +36,14 @@ class UtilitarianFramework(EthicalFramework):
             f"Current lane has {format_points(-current_cost)} points, "
             f"while the other lane has {format_points(-other_cost)} points"
         )
-        return EthicalDecision(action=action, reason=reason)
-
-    def record_decision(self, decision: EthicalDecision) -> None:
-        self.decision_history.append([decision.action, decision.reason])
-
-    def reset(self) -> None:
-        self.decision_history.clear()
+        return EthicalDecision(
+            action=action,
+            reason=reason,
+            details={
+                "current_lane_malus": current_cost,
+                "other_lane_malus": other_cost,
+            },
+        )
 
     def summary(
         self,

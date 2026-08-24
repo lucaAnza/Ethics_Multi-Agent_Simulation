@@ -14,7 +14,7 @@ In addition to traditional rule-based agents, the project will explore the use o
 
 The project aims to achieve the following objectives:
 
-* **Design a generated simulation environment** //TODO
+* **Design a generated simulation environment** ✅
   Create a system that produces dynamic and uncertain scenarios, for example in an autonomous driving context.
 
 * **Model ethical agents**  ✅
