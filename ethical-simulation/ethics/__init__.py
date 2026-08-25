@@ -11,6 +11,7 @@ from .base import (
     PerceptionState,
 )
 from .constant import CONFLICT_RESOLVERS, ConstantFramework
+from .factory import EthicalFrameworkFactory
 from .kant import KantFramework
 from .utilitarian import UtilitarianFramework
 from .virtue import VirtueEthicsFramework
@@ -21,6 +22,7 @@ __all__ = [
     "EthicalDecision",
     "DecisionContext",
     "EthicalFramework",
+    "EthicalFrameworkFactory",
     "DecisionRecord",
     "EntitySnapshot",
     "PerceptionState",

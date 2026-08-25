@@ -19,6 +19,7 @@ from simulation.entities import (
     PEDESTRIAN_MODEL_CYCLE,
     PEDESTRIAN_MODELS,
 )
+from simulation.entity_factory import EntityFactory
 
 if TYPE_CHECKING:
     from simulation.entities import Car, Pedestrian
@@ -329,6 +330,59 @@ def _generate_random_definition(
     }
 
 
+class ScenarioFactory:
+    """Create fixed or generated scenarios through one construction path."""
+
+    @staticmethod
+    def create(
+        name: str,
+        road_y: float,
+        definitions: (
+            Mapping[str, Mapping[str, list[dict[str, Any]]]] | None
+        ) = None,
+        *,
+        rng: random.Random | None = None,
+        world_width: float = DEFAULT_WINDOW_WIDTH,
+        random_settings: (
+            RandomScenarioSettings | Mapping[str, object] | None
+        ) = None,
+    ) -> Scenario:
+        """Instantiate a fresh scenario from serializable definitions."""
+        scenario_rng = rng or random.Random()
+        resolved_random_settings = None
+        if name == RANDOM_SCENARIO_NAME:
+            normalized_settings = validate_random_scenario_settings(
+                random_settings
+            )
+            resolved_random_settings = normalized_settings.resolve(scenario_rng)
+            definition = _generate_random_definition(
+                world_width,
+                rng=scenario_rng,
+                settings=resolved_random_settings,
+            )
+        else:
+            catalog = definitions or DEFAULT_SCENARIO_DEFINITIONS
+            if name not in catalog:
+                raise ValueError(f"Unknown scenario: {name}")
+            definition = catalog[name]
+
+        return Scenario(
+            cars=[
+                EntityFactory.create_car(car, road_y)
+                for car in definition["cars"]
+            ],
+            pedestrians=[
+                EntityFactory.create_pedestrian(
+                    person,
+                    road_y,
+                    rng=scenario_rng,
+                )
+                for person in definition["pedestrians"]
+            ],
+            random_settings=resolved_random_settings,
+        )
+
+
 def create_scenario(
     name: str,
     road_y: float,
@@ -338,49 +392,12 @@ def create_scenario(
     world_width: float = DEFAULT_WINDOW_WIDTH,
     random_settings: RandomScenarioSettings | Mapping[str, object] | None = None,
 ) -> Scenario:
-    """Instantiate a fresh scenario from serializable definitions."""
-    from simulation.entities import Car, Pedestrian
-
-    scenario_rng = rng or random.Random()
-    resolved_random_settings = None
-    if name == RANDOM_SCENARIO_NAME:
-        normalized_random_settings = validate_random_scenario_settings(
-            random_settings
-        )
-        resolved_random_settings = normalized_random_settings.resolve(scenario_rng)
-        definition = _generate_random_definition(
-            world_width,
-            rng=scenario_rng,
-            settings=resolved_random_settings,
-        )
-    else:
-        catalog = definitions or DEFAULT_SCENARIO_DEFINITIONS
-        if name not in catalog:
-            raise ValueError(f"Unknown scenario: {name}")
-        definition = catalog[name]
-    cars = [
-        Car(
-            x=float(car["x"]),
-            y=road_y + float(car["y_offset"]),
-            speed=float(car.get("speed", DEFAULT_VEHICLE_SPEED_KMH)),
-            lane_index=1 if float(car["y_offset"]) >= 0 else 0,
-        )
-        for car in definition["cars"]
-    ]
-    pedestrians = [
-        Pedestrian(
-            x=float(person["x"]),
-            y=road_y + float(person["y_offset"]),
-            model=person.get("model", "man"),
-            label=person.get("label"),
-            action=person.get("action", "still"),
-            speed=float(person.get("speed", DEFAULT_PEDESTRIAN_SPEED)),
-            _rng=scenario_rng,
-        )
-        for person in definition["pedestrians"]
-    ]
-    return Scenario(
-        cars=cars,
-        pedestrians=pedestrians,
-        random_settings=resolved_random_settings,
+    """Compatibility wrapper around :class:`ScenarioFactory`."""
+    return ScenarioFactory.create(
+        name,
+        road_y,
+        definitions,
+        rng=rng,
+        world_width=world_width,
+        random_settings=random_settings,
     )

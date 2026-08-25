@@ -2,12 +2,15 @@
 
 from typing import TYPE_CHECKING, Any
 
+from .entity_factory import EntityFactory
+
 if TYPE_CHECKING:
     from .engine import SimulationDecisionEvent, SimulationEngine, SimulationStepResult
     from .world import DetectedIncident, World
 
 __all__ = [
     "DetectedIncident",
+    "EntityFactory",
     "SimulationDecisionEvent",
     "SimulationEngine",
     "SimulationStepResult",

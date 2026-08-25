@@ -57,6 +57,12 @@ their own conversion factors.
 The time slider scales all simulation movement. Play, pause, and stop control
 the run; there is no manually driven free mode.
 
+Object construction is centralized in dedicated factories:
+`EthicalFrameworkFactory`, `DecisionEngineFactory`, `ScenarioFactory`, and
+`EntityFactory`. Interactive and automated runs therefore use the same
+creation paths and provider defaults. Compatibility helper functions remain
+available for existing callers.
+
 ## Automated Simulation
 
 The **Automated Simulation** toolbar button opens a headless batch runner with

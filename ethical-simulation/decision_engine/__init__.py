@@ -10,6 +10,7 @@ if TYPE_CHECKING:
         DecisionEngineResult,
         LLMDecisionEngine,
     )
+    from .factory import DecisionEngineFactory
 
 __all__ = [
     "DRIVING",
@@ -18,6 +19,7 @@ __all__ = [
     "CodeDecisionEngine",
     "DecisionEngineResult",
     "LLMDecisionEngine",
+    "DecisionEngineFactory",
     "CODE_MODE",
     "LLM_MODE",
     "IMPLEMENTATION_MODES",
@@ -38,4 +40,8 @@ def __getattr__(name: str) -> Any:
         from . import engine
 
         return getattr(engine, name)
+    if name == "DecisionEngineFactory":
+        from .factory import DecisionEngineFactory
+
+        return DecisionEngineFactory
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

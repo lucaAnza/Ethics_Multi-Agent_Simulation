@@ -10,9 +10,13 @@ from time import monotonic
 from typing import Callable
 
 from app_logging import application_logger
-from decision_engine import CODE_MODE, LLM_MODE, LLMDecisionEngine
-from ethics.factory import create_ethical_framework
-from llm import GeminiClient, PromptBuilder
+from decision_engine import (
+    CODE_MODE,
+    LLM_MODE,
+    DecisionEngineFactory,
+    LLMDecisionEngine,
+)
+from ethics.factory import EthicalFrameworkFactory
 from scenarios import RANDOM_SCENARIO_NAME
 from simulation.engine import SimulationEngine
 from simulation.statistics import casualty_category_counts
@@ -39,11 +43,8 @@ class AutomatedSimulationRunner:
         self,
         llm_engine_factory: Callable[[], LLMDecisionEngine] | None = None,
     ) -> None:
-        self._llm_engine_factory = llm_engine_factory or (
-            lambda: LLMDecisionEngine(
-                client=GeminiClient(),
-                prompt_builder=PromptBuilder(),
-            )
+        self._llm_engine_factory = (
+            llm_engine_factory or DecisionEngineFactory.create_llm
         )
         self._executor = ThreadPoolExecutor(
             max_workers=1,
@@ -217,7 +218,7 @@ class AutomatedSimulationRunner:
         pair_id: int | None,
         started_at: float,
     ) -> BatchSimulationResult | None:
-        framework = create_ethical_framework(
+        framework = EthicalFrameworkFactory.create(
             config.framework_name,
             config.framework_settings,
             utilitarian_values=config.utilitarian_values,

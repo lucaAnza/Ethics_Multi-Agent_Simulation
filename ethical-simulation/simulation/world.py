@@ -23,7 +23,7 @@ def _require_arcade():
         arcade = arcade_module
     return arcade
 
-from scenarios import DEFAULT_SCENARIO_NAME, create_scenario
+from scenarios import DEFAULT_SCENARIO_NAME, ScenarioFactory
 from simulation.config import (
     CAR_HALF_LENGTH as _CAR_HALF_LENGTH,
     CAR_HALF_WIDTH as _CAR_HALF_WIDTH,
@@ -321,7 +321,7 @@ class World:
     def reset(self, scenario: str | None = None) -> None:
         if scenario is not None:
             self.scenario_name = scenario
-        initial = create_scenario(
+        initial = ScenarioFactory.create(
             self.scenario_name,
             self.road_y,
             self.scenario_definitions,

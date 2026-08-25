@@ -30,8 +30,7 @@ from decision_engine import (
     DRIVING,
     LLM_MODE,
     WAITING_FOR_LLM,
-    CodeDecisionEngine,
-    LLMDecisionEngine,
+    DecisionEngineFactory,
 )
 from ethics.base import (
     CHANGE_LANE,
@@ -53,10 +52,9 @@ from ethics.config import (
     LLM_FRAMEWORKS,
     UTILITARIANISM,
 )
-from ethics.factory import create_ethical_framework
+from ethics.factory import EthicalFrameworkFactory
 from ethics.kant import KantFramework
 from ethics.rules import DEFAULT_RULE_ENABLED, DEFAULT_RULE_ORDER, MORAL_RULES
-from llm import GeminiClient, PromptBuilder
 from scenarios import (
     DEFAULT_SCENARIO_NAME,
     RANDOM_SCENARIO_NAME,
@@ -193,7 +191,7 @@ class SimulationWindow(arcade.Window):
             },
         }
         self.ethical_frameworks = {
-            framework_name: create_ethical_framework(
+            framework_name: EthicalFrameworkFactory.create(
                 framework_name,
                 self._framework_configuration(framework_name),
                 utilitarian_values=self.framework_settings[UTILITARIANISM],
@@ -203,11 +201,8 @@ class SimulationWindow(arcade.Window):
         self.llm_additional_instructions = {
             framework_name: "" for framework_name in sorted(LLM_FRAMEWORKS)
         }
-        self.code_decision_engine = CodeDecisionEngine()
-        self.llm_decision_engine = LLMDecisionEngine(
-            client=GeminiClient(),
-            prompt_builder=PromptBuilder(),
-        )
+        self.code_decision_engine = DecisionEngineFactory.create_code()
+        self.llm_decision_engine = DecisionEngineFactory.create_llm()
         self.simulation_engine = SimulationEngine(
             world=self.world,
             framework_name=self.current_framework,
