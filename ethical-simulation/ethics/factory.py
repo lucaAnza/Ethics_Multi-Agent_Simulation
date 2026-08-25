@@ -7,11 +7,17 @@ from copy import deepcopy
 from typing import Any
 
 from .base import EthicalFramework
-from .catalog import CONSTANT, KANT, UTILITARIANISM, VIRTUE_ETHICS
+from .config import (
+    CONSTANT,
+    DEFAULT_ENTITIES_VALUES,
+    KANT,
+    UTILITARIANISM,
+    VIRTUE_ETHICS,
+)
 from .constant import UTILITARIAN_EVALUATION, ConstantFramework
 from .kant import KantFramework
 from .rules import DEFAULT_RULE_ENABLED, DEFAULT_RULE_ORDER
-from .utilitarian import DEFAULT_ENTITIES_VALUES, UtilitarianFramework
+from .utilitarian import UtilitarianFramework
 from .virtue import VirtueEthicsFramework
 
 

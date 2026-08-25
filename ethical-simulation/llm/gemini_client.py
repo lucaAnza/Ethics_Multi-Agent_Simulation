@@ -5,16 +5,13 @@ from __future__ import annotations
 import os
 
 from .base_client import LLMClient
+from .config import DEFAULT_GEMINI_MODEL, MINIMUM_GEMINI_TIMEOUT_SECONDS
 from .schemas import DECISION_JSON_SCHEMA, LLMRawResponse, PromptPackage
-
-
-MINIMUM_GEMINI_TIMEOUT_SECONDS = 10.0
-
 
 class GeminiClient(LLMClient):
     """Structured-output client backed by the official ``google-genai`` SDK."""
 
-    def __init__(self, model: str = "gemini-3.5-flash-lite") -> None:
+    def __init__(self, model: str = DEFAULT_GEMINI_MODEL) -> None:
         self._model = model
 
     @property

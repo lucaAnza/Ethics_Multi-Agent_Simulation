@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from .base import STAY, DecisionContext, EthicalDecision, EthicalFramework, EntitySnapshot
+from .config import DEFAULT_ENTITIES_VALUES
 from .evaluation import choose_lower_cost
 from .rules import (
     DEFAULT_RULE_ENABLED,
@@ -12,7 +13,6 @@ from .rules import (
     evaluate_rule,
     normalize_enabled_rules,
 )
-from .utilitarian import DEFAULT_ENTITIES_VALUES
 
 
 UTILITARIAN_EVALUATION = "Utilitarian evaluation"

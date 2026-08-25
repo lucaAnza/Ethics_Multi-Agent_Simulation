@@ -1,9 +1,11 @@
 """Headless batch-simulation services and result models."""
 
-from .models import (
+from .config import (
     COMPARISON,
     ONLY_DETERMINISTIC,
     ONLY_LLM,
+)
+from .models import (
     BatchConfig,
     BatchProgress,
     BatchReport,

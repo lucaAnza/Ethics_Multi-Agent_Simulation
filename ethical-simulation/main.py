@@ -18,6 +18,13 @@ from automated import (
     BatchConfig,
     BatchReport,
 )
+from automated.config import (
+    DEFAULT_COMPARISON_BATCH_SIZE,
+    DEFAULT_DETERMINISTIC_BATCH_SIZE,
+    DEFAULT_LLM_BATCH_SIZE,
+    MAX_DETERMINISTIC_BATCH_RUNS,
+    MAX_LLM_BATCH_RUNS,
+)
 from decision_engine import (
     CODE_MODE,
     DRIVING,
@@ -30,14 +37,14 @@ from ethics.base import (
     CHANGE_LANE,
     EthicalDecision,
 )
-from ethics.utilitarian import DEFAULT_ENTITIES_VALUES
 from ethics.constant import (
     CONFLICT_RESOLVERS,
     UTILITARIAN_EVALUATION,
     ConstantFramework,
 )
-from ethics.catalog import (
+from ethics.config import (
     CONSTANT,
+    DEFAULT_ENTITIES_VALUES,
     DETERMINISTIC_FRAMEWORKS,
     FRAMEWORK_IMPLEMENTATIONS,
     FRAMEWORK_OPTIONS,
@@ -245,9 +252,9 @@ class SimulationWindow(arcade.Window):
         self.automated_framework = UTILITARIANISM
         self.automated_scenario = self.current_scenario
         self.automated_counts = {
-            ONLY_DETERMINISTIC: "1000",
-            ONLY_LLM: "10",
-            COMPARISON: "20",
+            ONLY_DETERMINISTIC: str(DEFAULT_DETERMINISTIC_BATCH_SIZE),
+            ONLY_LLM: str(DEFAULT_LLM_BATCH_SIZE),
+            COMPARISON: str(DEFAULT_COMPARISON_BATCH_SIZE),
         }
         self.automated_seed = ""
         self.automated_moved_probability = f"{DEFAULT_MOVED_PROBABILITY:.2f}"
@@ -1356,7 +1363,11 @@ class SimulationWindow(arcade.Window):
             count = int(self.automated_counts[self.automated_mode])
         except ValueError as error:
             raise ValueError("Number of simulations must be an integer") from error
-        maximum = 1_000_000 if self.automated_mode == ONLY_DETERMINISTIC else 1000
+        maximum = (
+            MAX_DETERMINISTIC_BATCH_RUNS
+            if self.automated_mode == ONLY_DETERMINISTIC
+            else MAX_LLM_BATCH_RUNS
+        )
         if not 1 <= count <= maximum:
             raise ValueError(f"Number of simulations must be between 1 and {maximum}")
         try:

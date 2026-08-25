@@ -1,18 +1,8 @@
 """Utilitarian lane choice based only on visible entities."""
 
 from .base import DecisionContext, EthicalDecision, EthicalFramework, EntitySnapshot
+from .config import DEFAULT_ENTITIES_VALUES
 from .evaluation import choose_lower_cost, entity_cost, format_points
-
-
-DEFAULT_ENTITIES_VALUES = {
-    "man": 10.0,
-    "woman": 10.0,
-    "old_man": 20.0,
-    "old_woman": 20.0,
-    "boy": 30.0,
-    "girl": 30.0,
-    "custom": 10.0,
-}
 
 
 class UtilitarianFramework(EthicalFramework):

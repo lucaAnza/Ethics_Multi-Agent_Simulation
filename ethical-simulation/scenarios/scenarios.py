@@ -1,4 +1,4 @@
-"""Persistent scenario definitions and factories for simulation state."""
+"""Scenario validation, persistence, and runtime factories."""
 
 from __future__ import annotations
 
@@ -12,13 +12,7 @@ import random
 from typing import TYPE_CHECKING, Any
 
 from app_logging import application_logger
-from simulation.config import (
-    DEFAULT_CAR_START_X,
-    DEFAULT_PEDESTRIAN_SPEED,
-    DEFAULT_VEHICLE_SPEED_KMH,
-    DEFAULT_WINDOW_WIDTH,
-    LANE_OFFSET,
-)
+from simulation.config import DEFAULT_WINDOW_WIDTH
 from simulation.entities import (
     MOVING_PEDESTRIAN_ACTIONS,
     PEDESTRIAN_ACTIONS,
@@ -29,52 +23,23 @@ from simulation.entities import (
 if TYPE_CHECKING:
     from simulation.entities import Car, Pedestrian
 
-
-SCENARIO_SETTINGS_PATH = Path(__file__).with_name("scenario_settings.json")
-DEFAULT_SCENARIO_NAME = "Scenario 1"
-RANDOM_SCENARIO_NAME = "Random Scenario"
-DEFAULT_MOVED_PROBABILITY = 0.1
-RANDOM_SCENARIO_MIN_ENTITIES = 2
-RANDOM_SCENARIO_MAX_ENTITIES = 10
-
-DEFAULT_SCENARIO_DEFINITIONS: dict[str, dict[str, list[dict[str, Any]]]] = {
-    DEFAULT_SCENARIO_NAME: {
-        "cars": [
-            {
-                "x": DEFAULT_CAR_START_X,
-                "y_offset": -LANE_OFFSET,
-                "speed": DEFAULT_VEHICLE_SPEED_KMH,
-            }
-        ],
-        "pedestrians": [
-            {
-                "x": 720.0,
-                "y_offset": -25.0,
-                "model": "man",
-                "label": None,
-                "action": "still",
-                "speed": DEFAULT_PEDESTRIAN_SPEED,
-            }
-        ],
-    },
-    "Scenario 2": {
-        "cars": [
-            {
-                "x": DEFAULT_CAR_START_X,
-                "y_offset": -LANE_OFFSET,
-                "speed": DEFAULT_VEHICLE_SPEED_KMH,
-            }
-        ],
-        "pedestrians": [
-            {"x": 400.0, "y_offset": 46.0, "model": "man", "label": None},
-            {"x": 475.0, "y_offset": 46.0, "model": "woman", "label": None},
-            {"x": 550.0, "y_offset": 46.0, "model": "old_man", "label": None},
-            {"x": 625.0, "y_offset": 46.0, "model": "old_woman", "label": None},
-            {"x": 700.0, "y_offset": 46.0, "model": "boy", "label": None},
-            {"x": 775.0, "y_offset": 46.0, "model": "girl", "label": None},
-        ],
-    },
-}
+from .config import (
+    DEFAULT_CAR_START_X,
+    DEFAULT_MOVED_PROBABILITY,
+    DEFAULT_PEDESTRIAN_SPEED,
+    DEFAULT_SCENARIO_DEFINITIONS,
+    DEFAULT_VEHICLE_SPEED_KMH,
+    LANE_OFFSET,
+    RANDOM_SCENARIO_MAX_ENTITIES,
+    RANDOM_SCENARIO_MIN_ENTITIES,
+    RANDOM_PEDESTRIAN_SPEED_RANGE,
+    RANDOM_SCENARIO_END_MARGIN,
+    RANDOM_SCENARIO_FIRST_ENTITY_X,
+    RANDOM_SCENARIO_NAME,
+    RANDOM_SCENARIO_POSITION_JITTER_RATIO,
+    REMOVED_SCENARIO_NAMES,
+    SCENARIO_SETTINGS_PATH,
+)
 
 
 @dataclass
@@ -103,7 +68,7 @@ def validate_scenario_definitions(
     for raw_name, raw_scenario in definitions.items():
         if not isinstance(raw_name, str) or not raw_name.strip():
             raise ValueError("scenario names must be non-empty strings")
-        if raw_name.strip() == "Scenario Free":
+        if raw_name.strip() in REMOVED_SCENARIO_NAMES:
             continue
         if raw_name.strip() == RANDOM_SCENARIO_NAME:
             raise ValueError(f"{RANDOM_SCENARIO_NAME} is a reserved scenario name")
@@ -231,13 +196,16 @@ def generate_random_scenario_definition(
         raise ValueError("moved_probability must be between 0 and 1")
 
     entity_count = rng.randint(minimum, maximum)
-    first_x = 320.0
-    last_x = max(first_x + 40.0, float(world_width) - 190.0)
+    first_x = RANDOM_SCENARIO_FIRST_ENTITY_X
+    last_x = max(first_x + 40.0, float(world_width) - RANDOM_SCENARIO_END_MARGIN)
     slot_width = (last_x - first_x) / entity_count
     positions = [
         first_x
         + slot_width * (index + 0.5)
-        + rng.uniform(-slot_width * 0.28, slot_width * 0.28)
+        + rng.uniform(
+            -slot_width * RANDOM_SCENARIO_POSITION_JITTER_RATIO,
+            slot_width * RANDOM_SCENARIO_POSITION_JITTER_RATIO,
+        )
         for index in range(entity_count)
     ]
     positions.sort()
@@ -266,7 +234,7 @@ def generate_random_scenario_definition(
                 "label": f"Custom {index + 1}" if model == "custom" else None,
                 "action": action,
                 "speed": (
-                    round(rng.uniform(35.0, 65.0), 2)
+                    round(rng.uniform(*RANDOM_PEDESTRIAN_SPEED_RANGE), 2)
                     if moves
                     else DEFAULT_PEDESTRIAN_SPEED
                 ),

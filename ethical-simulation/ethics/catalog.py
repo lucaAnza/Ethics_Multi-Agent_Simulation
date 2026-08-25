@@ -1,33 +1,28 @@
-"""Canonical catalog of ethical frameworks and supported implementations."""
+"""Backward-compatible imports for the framework catalog.
 
-from decision_engine.modes import CODE_MODE, LLM_MODE
+The canonical definitions live in :mod:`ethics.config`.
+"""
 
-
-UTILITARIANISM = "Utilitarianism"
-KANT = "Kant"
-CONSTANT = "Constant"
-VIRTUE_ETHICS = "Virtue Ethics"
-
-FRAMEWORK_IMPLEMENTATIONS = {
-    UTILITARIANISM: (CODE_MODE, LLM_MODE),
-    KANT: (CODE_MODE, LLM_MODE),
-    CONSTANT: (CODE_MODE, LLM_MODE),
-    VIRTUE_ETHICS: (LLM_MODE,),
-}
-
-FRAMEWORKS = tuple(FRAMEWORK_IMPLEMENTATIONS)
-DETERMINISTIC_FRAMEWORKS = tuple(
-    name
-    for name, implementations in FRAMEWORK_IMPLEMENTATIONS.items()
-    if CODE_MODE in implementations
+from .config import (
+    CONSTANT,
+    DETERMINISTIC_FRAMEWORKS,
+    FRAMEWORK_IMPLEMENTATIONS,
+    FRAMEWORK_OPTIONS,
+    FRAMEWORKS,
+    KANT,
+    LLM_FRAMEWORKS,
+    UTILITARIANISM,
+    VIRTUE_ETHICS,
 )
-LLM_FRAMEWORKS = frozenset(
-    name
-    for name, implementations in FRAMEWORK_IMPLEMENTATIONS.items()
-    if LLM_MODE in implementations
-)
-FRAMEWORK_OPTIONS = tuple(
-    f"{framework_name} ({implementation})"
-    for framework_name, implementations in FRAMEWORK_IMPLEMENTATIONS.items()
-    for implementation in implementations
-)
+
+__all__ = [
+    "CONSTANT",
+    "DETERMINISTIC_FRAMEWORKS",
+    "FRAMEWORK_IMPLEMENTATIONS",
+    "FRAMEWORK_OPTIONS",
+    "FRAMEWORKS",
+    "KANT",
+    "LLM_FRAMEWORKS",
+    "UTILITARIANISM",
+    "VIRTUE_ETHICS",
+]

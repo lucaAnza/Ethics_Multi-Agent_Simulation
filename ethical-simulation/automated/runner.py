@@ -17,9 +17,13 @@ from simulation.engine import SimulationEngine
 from simulation.statistics import casualty_category_counts
 from simulation.world import World
 
-from .models import (
+from .config import (
     COMPARISON,
+    FIXED_DELTA_TIME,
+    MAX_SIMULATED_SECONDS,
     ONLY_DETERMINISTIC,
+)
+from .models import (
     BatchConfig,
     BatchProgress,
     BatchReport,
@@ -29,9 +33,6 @@ from .models import (
 
 class AutomatedSimulationRunner:
     """Execute batches off the Arcade event loop and expose thread-safe progress."""
-
-    FIXED_DELTA_TIME = 1.0 / 60.0
-    MAX_SIMULATED_SECONDS = 180.0
 
     def __init__(
         self,
@@ -251,11 +252,11 @@ class AutomatedSimulationRunner:
         progress_waiting = False
         last_timing_update = 0.0
         try:
-            while not engine.finished and simulated_seconds < self.MAX_SIMULATED_SECONDS:
+            while not engine.finished and simulated_seconds < MAX_SIMULATED_SECONDS:
                 if self._cancel_event.is_set():
                     engine.cancel_pending_decision()
                     return None
-                step = engine.step(self.FIXED_DELTA_TIME)
+                step = engine.step(FIXED_DELTA_TIME)
                 if step.decision_event is not None:
                     progress = self.progress()
                     self._set_progress(
@@ -298,7 +299,7 @@ class AutomatedSimulationRunner:
                     if progress_waiting:
                         self._set_progress(waiting_for_llm=False)
                         progress_waiting = False
-                    simulated_seconds += self.FIXED_DELTA_TIME
+                    simulated_seconds += FIXED_DELTA_TIME
 
             if not engine.finished:
                 raise RuntimeError(

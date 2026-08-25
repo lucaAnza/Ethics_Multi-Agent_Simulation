@@ -3,14 +3,19 @@ from __future__ import annotations
 import unittest
 
 from decision_engine.modes import CODE_MODE, IMPLEMENTATION_MODES, LLM_MODE
-from ethics.catalog import (
+from ethics.config import (
+    DEFAULT_ENTITIES_VALUES,
     FRAMEWORK_IMPLEMENTATIONS,
     FRAMEWORK_OPTIONS,
     FRAMEWORKS,
     LLM_FRAMEWORKS,
 )
-from llm.prompt_builder import PROMPT_FILENAMES
-from scenarios import DEFAULT_SCENARIO_DEFINITIONS
+from ethics.utilitarian import DEFAULT_ENTITIES_VALUES as UTILITARIAN_DEFAULTS
+from llm.config import PROMPT_FILENAMES
+from scenarios import DEFAULT_SCENARIO_DEFINITIONS, DEFAULT_SCENARIO_NAME
+from scenarios.config import (
+    DEFAULT_SCENARIO_DEFINITIONS as CONFIG_SCENARIO_DEFINITIONS,
+)
 from simulation.config import (
     CAR_HALF_LENGTH,
     DEFAULT_DECISION_DISTANCE,
@@ -21,6 +26,10 @@ from simulation.config import (
     DEFAULT_WINDOW_HEIGHT,
     DEFAULT_WINDOW_WIDTH,
     LANE_OFFSET,
+    VEHICLE_PIXELS_PER_SECOND_PER_KMH,
+)
+from simulation.units import (
+    VEHICLE_PIXELS_PER_SECOND_PER_KMH as EXPORTED_SPEED_FACTOR,
 )
 from simulation.entities import (
     PEDESTRIAN_ACTION_LABELS,
@@ -35,6 +44,14 @@ from simulation.world import World
 
 
 class SharedConfigurationTests(unittest.TestCase):
+    def test_compatibility_exports_reference_canonical_configuration(self) -> None:
+        self.assertIs(DEFAULT_SCENARIO_DEFINITIONS, CONFIG_SCENARIO_DEFINITIONS)
+        self.assertIs(DEFAULT_ENTITIES_VALUES, UTILITARIAN_DEFAULTS)
+        self.assertEqual(
+            VEHICLE_PIXELS_PER_SECOND_PER_KMH,
+            EXPORTED_SPEED_FACTOR,
+        )
+
     def test_entity_metadata_covers_the_typed_runtime_catalogs(self) -> None:
         self.assertEqual(PEDESTRIAN_MODELS, PEDESTRIAN_MODEL_LABELS.keys())
         self.assertEqual(PEDESTRIAN_MODELS, PEDESTRIAN_CATEGORY_BY_MODEL.keys())
@@ -60,7 +77,7 @@ class SharedConfigurationTests(unittest.TestCase):
         world = World(
             DEFAULT_WINDOW_WIDTH,
             DEFAULT_WINDOW_HEIGHT,
-            "Scenario 1",
+            DEFAULT_SCENARIO_NAME,
             DEFAULT_SCENARIO_DEFINITIONS,
             rendering_enabled=False,
         )

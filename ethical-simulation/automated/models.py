@@ -11,11 +11,12 @@ from decision_engine.modes import CODE_MODE, LLM_MODE
 from ethics.base import DecisionRecord
 from scenarios import DEFAULT_MOVED_PROBABILITY
 
-
-ONLY_DETERMINISTIC = "Only Deterministic"
-ONLY_LLM = "Only LLM"
-COMPARISON = "Deterministic vs LLM"
-BATCH_MODES = (ONLY_DETERMINISTIC, ONLY_LLM, COMPARISON)
+from .config import (
+    BATCH_MODES,
+    COMPARISON,
+    MAX_LLM_BATCH_RUNS,
+    ONLY_DETERMINISTIC,
+)
 
 
 @dataclass(frozen=True)
@@ -41,8 +42,13 @@ class BatchConfig:
             raise ValueError(f"Unsupported automated mode: {self.mode}")
         if self.number_of_runs < 1:
             raise ValueError("Number of simulations must be at least 1")
-        if self.mode != ONLY_DETERMINISTIC and self.number_of_runs > 1000:
-            raise ValueError("LLM batches are limited to 1000 runs")
+        if (
+            self.mode != ONLY_DETERMINISTIC
+            and self.number_of_runs > MAX_LLM_BATCH_RUNS
+        ):
+            raise ValueError(
+                f"LLM batches are limited to {MAX_LLM_BATCH_RUNS} runs"
+            )
         if not 0.0 <= self.moved_probability <= 1.0:
             raise ValueError("Movement probability must be between 0 and 1")
 
