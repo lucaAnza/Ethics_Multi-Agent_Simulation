@@ -34,7 +34,14 @@ from simulation.config import (
     MIN_CONFIGURABLE_DECISION_DISTANCE,
 )
 from simulation.entities import PEDESTRIAN_ACTION_LABELS, PEDESTRIAN_MODEL_LABELS
-from ui.theme import MUTED, TEXT, dropdown_styles
+from ui.theme import (
+    FRAMEWORK_SELECTION,
+    MODE_SELECTION,
+    MUTED,
+    SCENARIO_SELECTION,
+    TEXT,
+    dropdown_styles,
+)
 
 MEDAL_COLORS = (
     (212, 175, 55),   # Gold
@@ -742,91 +749,118 @@ def build_automated_settings(
     arcade.gui.UILabel,
 ]:
     """Build the batch configuration form and return its editable fields."""
-    content = arcade.gui.UIBoxLayout(vertical=True, space_between=12, width=620)
+    content_width = 650
+    label_width = 215
+    control_width = 390
+    row_width = label_width + 12 + control_width
+    content = arcade.gui.UIBoxLayout(
+        vertical=True,
+        space_between=12,
+        width=content_width,
+    )
     content.add(
         _heading(
             "AUTOMATED SIMULATION",
             "RUN THE SHARED SIMULATION ENGINE WITHOUT RENDERING",
-            620,
+            content_width,
         )
     )
 
-    form = arcade.gui.UIBoxLayout(vertical=True, space_between=8, width=620)
+    form = arcade.gui.UIBoxLayout(
+        vertical=True,
+        space_between=8,
+        width=content_width,
+    )
+
+    def add_labeled_control(
+        label: str,
+        control: arcade.gui.UIWidget,
+    ) -> None:
+        row = arcade.gui.UIBoxLayout(
+            vertical=False,
+            space_between=12,
+            width=row_width,
+            height=34,
+            size_hint_min=(row_width, 34),
+            size_hint_max=(row_width, 34),
+        )
+        label_holder, _label = _fixed_label(
+            label,
+            width=label_width,
+            height=34,
+            font_size=11,
+            text_color=MUTED,
+            anchor_x="right",
+        )
+        row.add(label_holder)
+        row.add(control)
+        form.add(row)
 
     def dropdown_row(
         label: str,
         selected: str,
         options: list[str],
         callback: Callable,
+        selected_color: tuple[int, int, int],
     ) -> None:
-        row = arcade.gui.UIBoxLayout(vertical=False, space_between=12)
-        row.add(
-            arcade.gui.UILabel(
-                text=label,
-                width=215,
-                height=34,
-                font_size=11,
-                text_color=MUTED,
-            )
-        )
-        dropdown = row.add(
-            arcade.gui.UIDropdown(
-                default=selected,
-                options=options,
-                width=390,
-                height=34,
-            )
+        dropdown = arcade.gui.UIDropdown(
+            default=selected,
+            options=options,
+            width=control_width,
+            height=34,
+            size_hint_min=(control_width, 34),
+            size_hint_max=(control_width, 34),
+            **dropdown_styles(selected_color),
         )
         dropdown.on_change = callback
-        form.add(row)
+        add_labeled_control(label, dropdown)
 
-    dropdown_row("Mode", mode, mode_options, on_mode_change)
+    dropdown_row(
+        "Mode",
+        mode,
+        mode_options,
+        on_mode_change,
+        MODE_SELECTION,
+    )
 
-    count_row = arcade.gui.UIBoxLayout(vertical=False, space_between=12)
-    count_row.add(
-        arcade.gui.UILabel(
-            text=(
-                "Number of paired simulations"
-                if mode == "Deterministic vs LLM"
-                else "Number of simulations"
-            ),
-            width=215,
-            height=34,
-            font_size=11,
-            text_color=MUTED,
-        )
+    count_label = (
+        "Number of paired simulations"
+        if mode == "Deterministic vs LLM"
+        else "Number of simulations"
     )
-    count_input = count_row.add(
-        arcade.gui.UIInputText(
-            text=number_of_runs,
-            width=390,
-            height=34,
-            font_size=12,
-        )
+    count_input = arcade.gui.UIInputText(
+        text=number_of_runs,
+        width=control_width,
+        height=34,
+        size_hint_min=(control_width, 34),
+        size_hint_max=(control_width, 34),
+        font_size=12,
     )
-    form.add(count_row)
-    dropdown_row("Framework", framework, framework_options, on_framework_change)
-    dropdown_row("Scenario", scenario, scenario_options, on_scenario_change)
+    add_labeled_control(count_label, count_input)
+    dropdown_row(
+        "Framework",
+        framework,
+        framework_options,
+        on_framework_change,
+        FRAMEWORK_SELECTION,
+    )
+    dropdown_row(
+        "Scenario",
+        scenario,
+        scenario_options,
+        on_scenario_change,
+        SCENARIO_SELECTION,
+    )
 
-    seed_row = arcade.gui.UIBoxLayout(vertical=False, space_between=12)
-    seed_row.add(
-        arcade.gui.UILabel(
-            text="Random seed (optional)",
-            width=215,
-            height=34,
-            font_size=11,
-            text_color=MUTED,
-        )
+    seed_input = arcade.gui.UIInputText(
+        text=random_seed,
+        width=control_width,
+        height=34,
+        size_hint_min=(control_width, 34),
+        size_hint_max=(control_width, 34),
+        font_size=12,
     )
-    seed_input = seed_row.add(
-        arcade.gui.UIInputText(
-            text=random_seed,
-            width=390,
-            height=34,
-            font_size=12,
-        )
-    )
-    form.add(seed_row)
+    add_labeled_control("Random seed (optional)", seed_input)
     if random_scenario_selected:
         form.add(
             arcade.gui.UILabel(
@@ -834,7 +868,7 @@ def build_automated_settings(
                     "Random generator values are managed in Menu > "
                     "Scenario Settings > Random Scenario."
                 ),
-                width=590,
+                width=row_width,
                 height=34,
                 font_size=9,
                 text_color=(251, 191, 36),
@@ -858,7 +892,7 @@ def build_automated_settings(
     content.add(
         arcade.gui.UILabel(
             text=note,
-            width=620,
+            width=content_width,
             height=28,
             font_size=9,
             text_color=note_color,
@@ -868,7 +902,7 @@ def build_automated_settings(
     status = content.add(
         arcade.gui.UILabel(
             text=message,
-            width=620,
+            width=content_width,
             height=28,
             font_size=9,
             text_color=(248, 113, 113),

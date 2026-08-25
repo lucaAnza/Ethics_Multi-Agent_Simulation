@@ -354,7 +354,7 @@ class SimulationWindow(arcade.Window):
 
         playback_controls = arcade.gui.UIBoxLayout(vertical=False, space_between=5)
         time_holder, self.time_scale_label = fixed_label(
-            f"Time x{self.time_scale:.2f}", 52
+            f"x{self.time_scale:.2f}", 32
         )
         playback_controls.add(time_holder)
         time_slider = playback_controls.add(
@@ -363,7 +363,7 @@ class SimulationWindow(arcade.Window):
                 min_value=0.25,
                 max_value=2.0,
                 step=0.25,
-                width=38,
+                width=60,
                 height=26,
             )
         )
@@ -566,7 +566,7 @@ class SimulationWindow(arcade.Window):
     def _time_scale_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
         if event.new_value is not None:
             self.time_scale = float(event.new_value)
-            self.time_scale_label.text = f"Time x{self.time_scale:.2f}"
+            self.time_scale_label.text = f"x{self.time_scale:.2f}"
 
     def _initial_speed_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
         if event.new_value is not None:
