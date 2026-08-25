@@ -7,7 +7,9 @@ from dataclasses import dataclass, field
 from itertools import zip_longest
 from typing import Any
 
+from decision_engine.modes import CODE_MODE, LLM_MODE
 from ethics.base import DecisionRecord
+from scenarios import DEFAULT_MOVED_PROBABILITY
 
 
 ONLY_DETERMINISTIC = "Only Deterministic"
@@ -32,7 +34,7 @@ class BatchConfig:
     vision_distance: float
     decision_distance: float
     max_lane_changes: int
-    moved_probability: float = 0.1
+    moved_probability: float = DEFAULT_MOVED_PROBABILITY
 
     def __post_init__(self) -> None:
         if self.mode not in BATCH_MODES:
@@ -141,7 +143,7 @@ class BatchReport:
             sum(result.number_of_decisions for result in self.results) / denominator,
         )
 
-        llm_results = [r for r in self.results if r.implementation == "llm-agent"]
+        llm_results = [r for r in self.results if r.implementation == LLM_MODE]
         weighted_latencies = [
             (r.average_latency_ms, r.number_of_decisions)
             for r in llm_results
@@ -196,8 +198,8 @@ class BatchReport:
         different_results = 0
         complete_pairs = 0
         for pair in pairs.values():
-            code = pair.get("code")
-            llm = pair.get("llm-agent")
+            code = pair.get(CODE_MODE)
+            llm = pair.get(LLM_MODE)
             if code is None or llm is None:
                 continue
             complete_pairs += 1

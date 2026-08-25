@@ -5,6 +5,11 @@ import random
 from dataclasses import dataclass, field
 from typing import Literal, cast, get_args
 
+from .config import (
+    DEFAULT_PEDESTRIAN_SPEED,
+    DEFAULT_VEHICLE_SPEED_KMH,
+    LANE_CHANGE_DURATION,
+)
 from .units import vehicle_kmh_to_pixels_per_second
 
 
@@ -27,6 +32,39 @@ PEDESTRIAN_MODELS = frozenset(_PEDESTRIAN_MODEL_VALUES)
 PEDESTRIAN_MODEL_CYCLE = tuple(
     model for model in _PEDESTRIAN_MODEL_VALUES if model != "custom"
 )
+PEDESTRIAN_MODEL_LABELS: dict[PedestrianModel, str] = {
+    "man": "Man",
+    "woman": "Woman",
+    "old_man": "Old man",
+    "old_woman": "Old woman",
+    "boy": "Boy",
+    "girl": "Girl",
+    "custom": "Custom",
+}
+PEDESTRIAN_CATEGORY_BY_MODEL: dict[PedestrianModel, str] = {
+    "man": "Adult",
+    "woman": "Adult",
+    "old_man": "Elderly",
+    "old_woman": "Elderly",
+    "boy": "Child",
+    "girl": "Child",
+    "custom": "Custom",
+}
+PEDESTRIAN_CATEGORY_PLURALS = {
+    "Child": "Children",
+    "Adult": "Adults",
+    "Elderly": "Elderly",
+    "Custom": "Custom",
+}
+DEFAULT_CASUALTY_CATEGORIES = ("Child", "Adult", "Elderly")
+
+
+def pedestrian_category(model: str) -> str:
+    """Return the reporting category for any supported pedestrian model."""
+    if model in PEDESTRIAN_CATEGORY_BY_MODEL:
+        return PEDESTRIAN_CATEGORY_BY_MODEL[cast(PedestrianModel, model)]
+    return model.replace("_", " ").title()
+
 
 PedestrianAction = Literal[
     "still",
@@ -43,6 +81,14 @@ PEDESTRIAN_ACTIONS = frozenset(
 MOVING_PEDESTRIAN_ACTIONS = tuple(
     sorted(action for action in PEDESTRIAN_ACTIONS if action != "still")
 )
+PEDESTRIAN_ACTION_LABELS: dict[PedestrianAction, str] = {
+    "still": "Still",
+    "move_right": "Move right",
+    "move_left": "Move left",
+    "move_down": "Move down",
+    "move_up": "Move up",
+    "random_move": "Random move",
+}
 
 
 @dataclass
@@ -50,13 +96,17 @@ class Car:
     x: float
     y: float
     # Public vehicle speed is always expressed in km/h.
-    speed: float = 50.0
+    speed: float = DEFAULT_VEHICLE_SPEED_KMH
     lane_index: int = 0
     _lane_change_start_y: float = field(default=0.0, init=False, repr=False)
     _lane_change_target_y: float = field(default=0.0, init=False, repr=False)
     _lane_change_target_index: int | None = field(default=None, init=False, repr=False)
     _lane_change_elapsed: float = field(default=0.0, init=False, repr=False)
-    _lane_change_duration: float = field(default=0.10, init=False, repr=False)
+    _lane_change_duration: float = field(
+        default=LANE_CHANGE_DURATION,
+        init=False,
+        repr=False,
+    )
 
     @property
     def is_changing_lane(self) -> bool:
@@ -66,7 +116,7 @@ class Car:
         self,
         target_lane_index: int,
         target_y: float,
-        duration: float = 0.10,
+        duration: float = LANE_CHANGE_DURATION,
     ) -> bool:
         """Begin a linear vertical transition without changing vehicle heading."""
         if self.is_changing_lane or target_lane_index == self.lane_index:
@@ -107,7 +157,7 @@ class Pedestrian:
     model: PedestrianModel = "man"
     label: str | None = None
     action: PedestrianAction = "still"
-    speed: float = 55.0
+    speed: float = DEFAULT_PEDESTRIAN_SPEED
     alive: bool = True
     _random_heading: float = field(default=0.0, init=False, repr=False)
     _random_time_remaining: float = field(default=0.0, init=False, repr=False)

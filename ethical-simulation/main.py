@@ -19,7 +19,9 @@ from automated import (
     BatchReport,
 )
 from decision_engine import (
+    CODE_MODE,
     DRIVING,
+    LLM_MODE,
     WAITING_FOR_LLM,
     CodeDecisionEngine,
     LLMDecisionEngine,
@@ -34,25 +36,50 @@ from ethics.constant import (
     UTILITARIAN_EVALUATION,
     ConstantFramework,
 )
+from ethics.catalog import (
+    CONSTANT,
+    DETERMINISTIC_FRAMEWORKS,
+    FRAMEWORK_IMPLEMENTATIONS,
+    FRAMEWORK_OPTIONS,
+    FRAMEWORKS,
+    KANT,
+    LLM_FRAMEWORKS,
+    UTILITARIANISM,
+)
+from ethics.factory import create_ethical_framework
 from ethics.kant import KantFramework
 from ethics.rules import DEFAULT_RULE_ENABLED, DEFAULT_RULE_ORDER, MORAL_RULES
-from ethics.utilitarian import UtilitarianFramework
-from ethics.virtue import VirtueEthicsFramework
 from llm import GeminiClient, PromptBuilder
 from scenarios import (
     DEFAULT_MOVED_PROBABILITY,
+    DEFAULT_SCENARIO_NAME,
     RANDOM_SCENARIO_NAME,
     load_scenario_definitions,
     save_scenario_definitions,
 )
 from simulation import SimulationDecisionEvent, SimulationEngine, World
-from simulation.entities import Pedestrian
+from simulation.config import (
+    DEFAULT_CAR_START_X,
+    DEFAULT_DECISION_DISTANCE,
+    DEFAULT_MAX_LANE_CHANGES,
+    DEFAULT_PEDESTRIAN_SPEED,
+    DEFAULT_VEHICLE_SPEED_KMH,
+    DEFAULT_VISION_DISTANCE,
+    DEFAULT_WINDOW_HEIGHT as SCREEN_HEIGHT,
+    DEFAULT_WINDOW_WIDTH as SCREEN_WIDTH,
+    LANE_OFFSET,
+    MAX_CONFIGURABLE_VEHICLE_SPEED_KMH,
+    TOP_TOOLBAR_HEIGHT as TOOLBAR_HEIGHT,
+)
+from simulation.entities import (
+    PEDESTRIAN_ACTION_LABELS,
+    PEDESTRIAN_MODEL_LABELS,
+    Pedestrian,
+)
 from simulation.statistics import casualty_category_counts
 from ui.batch_report import BatchReportRenderer
 from ui.report import SimulationReportData, SimulationReportRenderer
 from ui.screens import (
-    ENTITY_MODEL_LABELS,
-    PEDESTRIAN_ACTION_LABELS,
     build_automated_progress,
     build_automated_settings,
     build_batch_report_navigation,
@@ -68,32 +95,6 @@ from ui.screens import (
 PROJECT_ROOT = Path(__file__).resolve().parent
 load_dotenv(PROJECT_ROOT / ".env")
 
-SCREEN_WIDTH = 1200
-SCREEN_HEIGHT = 800
-TOOLBAR_HEIGHT = 72
-
-CODE_MODE = "code"
-LLM_MODE = "llm-agent"
-FRAMEWORK_IMPLEMENTATIONS = {
-    "Utilitarianism": (CODE_MODE, LLM_MODE),
-    "Kant": (CODE_MODE, LLM_MODE),
-    "Constant": (CODE_MODE, LLM_MODE),
-    "Virtue Ethics": (LLM_MODE,),
-}
-FRAMEWORKS = list(FRAMEWORK_IMPLEMENTATIONS)
-DETERMINISTIC_FRAMEWORKS = [
-    name for name, modes in FRAMEWORK_IMPLEMENTATIONS.items() if CODE_MODE in modes
-]
-LLM_FRAMEWORKS = {
-    framework_name
-    for framework_name, implementations in FRAMEWORK_IMPLEMENTATIONS.items()
-    if LLM_MODE in implementations
-}
-FRAMEWORK_OPTIONS = [
-    f"{framework_name} ({implementation})"
-    for framework_name, implementations in FRAMEWORK_IMPLEMENTATIONS.items()
-    for implementation in implementations
-]
 GITHUB_REPOSITORY = "https://github.com/lucaAnza/Ethics_Multi-Agent_Simulation"
 
 REPORT_BUTTON_STYLE = {
@@ -127,22 +128,22 @@ class SimulationWindow(arcade.Window):
             resizable=True,
         )
         self.set_minimum_size(1185, 500)
-        self.current_framework = "Utilitarianism"
+        self.current_framework = UTILITARIANISM
         self.current_implementation = CODE_MODE
         self.framework_editor_mode = CODE_MODE
         self.scenario_definitions = load_scenario_definitions()
         self.scenario_names = [*self.scenario_definitions, RANDOM_SCENARIO_NAME]
         self.current_scenario = (
-            "Scenario 1"
-            if "Scenario 1" in self.scenario_definitions
+            DEFAULT_SCENARIO_NAME
+            if DEFAULT_SCENARIO_NAME in self.scenario_definitions
             else self.scenario_names[0]
         )
         self.active_screen = "simulation"
         self.is_running = False
         self.time_scale = 1.0
-        self.vision_distance = 300.0
-        self.decision_distance = 120.0
-        self.max_spostamenti = 2
+        self.vision_distance = DEFAULT_VISION_DISTANCE
+        self.decision_distance = DEFAULT_DECISION_DISTANCE
+        self.max_spostamenti = DEFAULT_MAX_LANE_CHANGES
         self.simulation_finished = False
         self.last_decision: EthicalDecision | None = None
         self.decision_phase = DRIVING
@@ -160,32 +161,23 @@ class SimulationWindow(arcade.Window):
             max_spostamenti=self.max_spostamenti,
         )
         self.framework_settings = {
-            "Utilitarianism": dict(DEFAULT_ENTITIES_VALUES),
-            "Kant": {
+            UTILITARIANISM: dict(DEFAULT_ENTITIES_VALUES),
+            KANT: {
                 "rule_order": list(DEFAULT_RULE_ORDER),
                 "enabled_rules": dict(DEFAULT_RULE_ENABLED),
             },
-            "Constant": {
+            CONSTANT: {
                 "enabled_rules": dict(DEFAULT_RULE_ENABLED),
                 "conflict_resolution": UTILITARIAN_EVALUATION,
             },
         }
         self.ethical_frameworks = {
-            "Utilitarianism": UtilitarianFramework(
-                self.framework_settings["Utilitarianism"]
-            ),
-            "Kant": KantFramework(
-                rule_order=self.framework_settings["Kant"]["rule_order"],
-                enabled_rules=self.framework_settings["Kant"]["enabled_rules"],
-            ),
-            "Constant": ConstantFramework(
-                enabled_rules=self.framework_settings["Constant"]["enabled_rules"],
-                conflict_resolution=self.framework_settings["Constant"][
-                    "conflict_resolution"
-                ],
-                entity_values=self.framework_settings["Utilitarianism"],
-            ),
-            "Virtue Ethics": VirtueEthicsFramework(),
+            framework_name: create_ethical_framework(
+                framework_name,
+                self._framework_configuration(framework_name),
+                utilitarian_values=self.framework_settings[UTILITARIANISM],
+            )
+            for framework_name in FRAMEWORKS
         }
         self.llm_additional_instructions = {
             framework_name: "" for framework_name in sorted(LLM_FRAMEWORKS)
@@ -200,7 +192,7 @@ class SimulationWindow(arcade.Window):
             framework_name=self.current_framework,
             implementation=self.current_implementation,
             framework=self.ethical_frameworks[self.current_framework],
-            framework_settings_provider=self._llm_framework_settings,
+            framework_settings_provider=self._framework_configuration,
             additional_instructions_provider=(
                 lambda framework_name: self.llm_additional_instructions.get(
                     framework_name,
@@ -217,7 +209,9 @@ class SimulationWindow(arcade.Window):
             name: float(definition["cars"][0]["speed"])
             for name, definition in self.scenario_definitions.items()
         }
-        self.scenario_initial_speeds[RANDOM_SCENARIO_NAME] = 50.0
+        self.scenario_initial_speeds[RANDOM_SCENARIO_NAME] = (
+            DEFAULT_VEHICLE_SPEED_KMH
+        )
         self.scenario_editor_draft = deepcopy(self.scenario_definitions)
         self.scenario_editor_scenario = self.current_scenario
         self.scenario_editor_entity = ("cars", 0)
@@ -248,7 +242,7 @@ class SimulationWindow(arcade.Window):
         self.automated_runner = AutomatedSimulationRunner()
         self.batch_renderer = BatchReportRenderer()
         self.automated_mode = ONLY_DETERMINISTIC
-        self.automated_framework = "Utilitarianism"
+        self.automated_framework = UTILITARIANISM
         self.automated_scenario = self.current_scenario
         self.automated_counts = {
             ONLY_DETERMINISTIC: "1000",
@@ -380,7 +374,7 @@ class SimulationWindow(arcade.Window):
             arcade.gui.UISlider(
                 value=initial_kmh,
                 min_value=0,
-                max_value=200,
+                max_value=MAX_CONFIGURABLE_VEHICLE_SPEED_KMH,
                 step=1,
                 width=34,
                 height=26,
@@ -481,7 +475,7 @@ class SimulationWindow(arcade.Window):
                     if implementation in allowed:
                         return framework_name, implementation
                     return framework_name, allowed[0]
-        return "Utilitarianism", CODE_MODE
+        return UTILITARIANISM, CODE_MODE
 
     def _reset_framework_state(self) -> None:
         for framework in self.ethical_frameworks.values():
@@ -607,18 +601,18 @@ class SimulationWindow(arcade.Window):
             llm_response=event.llm_response,
         )
 
-    def _llm_framework_settings(self, framework_name: str) -> dict:
-        """Return only the selected framework's structured configuration."""
-        if framework_name == "Utilitarianism":
+    def _framework_configuration(self, framework_name: str) -> dict:
+        """Return an isolated configuration for one ethical framework."""
+        if framework_name == UTILITARIANISM:
             return {
                 "entity_values": deepcopy(
-                    self.framework_settings["Utilitarianism"]
+                    self.framework_settings[UTILITARIANISM]
                 )
             }
         settings = deepcopy(self.framework_settings.get(framework_name, {}))
-        if framework_name == "Constant":
+        if framework_name == CONSTANT:
             settings["entity_values"] = deepcopy(
-                self.framework_settings["Utilitarianism"]
+                self.framework_settings[UTILITARIANISM]
             )
         return settings
 
@@ -788,7 +782,7 @@ class SimulationWindow(arcade.Window):
         selected = (
             self.current_framework
             if self.current_framework in FRAMEWORKS
-            else "Utilitarianism"
+            else UTILITARIANISM
         )
         self.framework_editor_mode = (
             self.current_implementation if selected in LLM_FRAMEWORKS else CODE_MODE
@@ -813,10 +807,10 @@ class SimulationWindow(arcade.Window):
             self.manager,
             selected=framework_name,
             selected_mode=self.framework_editor_mode,
-            utilitarian_entity_values=self.framework_settings["Utilitarianism"],
-            kant_rules=self._framework_rule_rows("Kant"),
-            constant_rules=self._framework_rule_rows("Constant"),
-            constant_conflict_resolution=self.framework_settings["Constant"][
+            utilitarian_entity_values=self.framework_settings[UTILITARIANISM],
+            kant_rules=self._framework_rule_rows(KANT),
+            constant_rules=self._framework_rule_rows(CONSTANT),
+            constant_conflict_resolution=self.framework_settings[CONSTANT][
                 "conflict_resolution"
             ],
             conflict_resolvers=list(CONFLICT_RESOLVERS),
@@ -878,7 +872,7 @@ class SimulationWindow(arcade.Window):
         settings = self.framework_settings[framework_name]
         rule_order = (
             settings["rule_order"]
-            if framework_name == "Kant"
+            if framework_name == KANT
             else list(DEFAULT_RULE_ORDER)
         )
         enabled_rules = settings["enabled_rules"]
@@ -903,7 +897,7 @@ class SimulationWindow(arcade.Window):
         self._show_framework_editor(framework_name)
 
     def _move_kant_rule(self, rule_key: str, direction: int) -> None:
-        rule_order = self.framework_settings["Kant"]["rule_order"]
+        rule_order = self.framework_settings[KANT]["rule_order"]
         current_index = rule_order.index(rule_key)
         target_index = max(0, min(len(rule_order) - 1, current_index + direction))
         if target_index == current_index:
@@ -912,13 +906,13 @@ class SimulationWindow(arcade.Window):
             rule_order[target_index],
             rule_order[current_index],
         )
-        self._apply_framework_rule_settings("Kant")
-        self._show_framework_editor("Kant")
+        self._apply_framework_rule_settings(KANT)
+        self._show_framework_editor(KANT)
 
     def _set_constant_conflict_resolver(self, resolver: str) -> None:
-        self.framework_settings["Constant"]["conflict_resolution"] = resolver
-        self._apply_framework_rule_settings("Constant")
-        self._show_framework_editor("Constant")
+        self.framework_settings[CONSTANT]["conflict_resolution"] = resolver
+        self._apply_framework_rule_settings(CONSTANT)
+        self._show_framework_editor(CONSTANT)
 
     def _apply_framework_rule_settings(self, framework_name: str) -> None:
         settings = self.framework_settings[framework_name]
@@ -957,10 +951,10 @@ class SimulationWindow(arcade.Window):
             self.framework_status_label.text = "Enter a valid numeric value in every field."
             return
 
-        self.framework_settings["Utilitarianism"].update(parsed_values)
-        utilitarian = self.ethical_frameworks["Utilitarianism"]
+        self.framework_settings[UTILITARIANISM].update(parsed_values)
+        utilitarian = self.ethical_frameworks[UTILITARIANISM]
         utilitarian.update_entity_values(parsed_values)
-        constant = self.ethical_frameworks["Constant"]
+        constant = self.ethical_frameworks[CONSTANT]
         constant.update_entity_values(parsed_values)
         self.framework_status_label.text = "Values saved in simulation state."
 
@@ -1054,7 +1048,7 @@ class SimulationWindow(arcade.Window):
             model = next(
                 (
                     key
-                    for key, display_name in ENTITY_MODEL_LABELS.items()
+                    for key, display_name in PEDESTRIAN_MODEL_LABELS.items()
                     if display_name == selected_label
                 ),
                 "man",
@@ -1076,7 +1070,7 @@ class SimulationWindow(arcade.Window):
             pedestrian_speed = (
                 float(self.scenario_editor_pedestrian_speed.value)
                 if self.scenario_editor_pedestrian_speed is not None
-                else 55.0
+                else DEFAULT_PEDESTRIAN_SPEED
             )
             entity.update(
                 {
@@ -1111,9 +1105,9 @@ class SimulationWindow(arcade.Window):
         cars = self.scenario_editor_draft[self.scenario_editor_scenario]["cars"]
         cars.append(
             {
-                "x": 130.0 + 110.0 * len(cars),
-                "y_offset": -45.0,
-                "speed": 50.0,
+                "x": DEFAULT_CAR_START_X + 110.0 * len(cars),
+                "y_offset": -LANE_OFFSET,
+                "speed": DEFAULT_VEHICLE_SPEED_KMH,
             }
         )
         self.scenario_editor_entity = ("cars", len(cars) - 1)
@@ -1135,7 +1129,7 @@ class SimulationWindow(arcade.Window):
                 "model": "man",
                 "label": None,
                 "action": "still",
-                "speed": 55.0,
+                "speed": DEFAULT_PEDESTRIAN_SPEED,
             }
         )
         self.scenario_editor_entity = ("pedestrians", len(pedestrians) - 1)
@@ -1219,7 +1213,9 @@ class SimulationWindow(arcade.Window):
             name: float(definition["cars"][0]["speed"])
             for name, definition in saved_definitions.items()
         }
-        self.scenario_initial_speeds[RANDOM_SCENARIO_NAME] = 50.0
+        self.scenario_initial_speeds[RANDOM_SCENARIO_NAME] = (
+            DEFAULT_VEHICLE_SPEED_KMH
+        )
         self.world.set_scenario_definitions(saved_definitions)
         self.world.reset(self.current_scenario)
         self.world.configure_vehicle(
@@ -1286,7 +1282,7 @@ class SimulationWindow(arcade.Window):
         if self.automated_framework not in (
             FRAMEWORKS if self.automated_mode == ONLY_LLM else DETERMINISTIC_FRAMEWORKS
         ):
-            self.automated_framework = "Utilitarianism"
+            self.automated_framework = UTILITARIANISM
         if self.automated_scenario not in self.scenario_names:
             self.automated_scenario = self.scenario_names[0]
         self.active_screen = "automated_settings"
@@ -1327,7 +1323,7 @@ class SimulationWindow(arcade.Window):
             self.automated_mode != ONLY_LLM
             and self.automated_framework not in DETERMINISTIC_FRAMEWORKS
         ):
-            self.automated_framework = "Utilitarianism"
+            self.automated_framework = UTILITARIANISM
         self._open_automated_settings()
 
     def _automated_framework_changed(
@@ -1384,11 +1380,11 @@ class SimulationWindow(arcade.Window):
             random_seed=seed,
             moved_probability=moved_probability,
             scenario_definitions=deepcopy(self.scenario_definitions),
-            framework_settings=self._llm_framework_settings(
+            framework_settings=self._framework_configuration(
                 self.automated_framework
             ),
             utilitarian_values=deepcopy(
-                self.framework_settings["Utilitarianism"]
+                self.framework_settings[UTILITARIANISM]
             ),
             additional_instructions=self.llm_additional_instructions.get(
                 self.automated_framework,
@@ -1487,7 +1483,7 @@ class SimulationWindow(arcade.Window):
             if self.scenario_location_preview is not None:
                 self.scenario_location_preview.draw(show_vehicle_vision=False)
             cursor_x, cursor_y = self.scenario_location_cursor
-            if cursor_y < self.height - 78:
+            if cursor_y < self.height - TOOLBAR_HEIGHT - 6:
                 entity_kind, _entity_index = self.scenario_editor_entity
                 entity_top_offset = 34 if entity_kind == "cars" else 22
                 arrow_tip_y = cursor_y + entity_top_offset
@@ -1673,7 +1669,7 @@ class SimulationWindow(arcade.Window):
         if (
             self.active_screen != "scenario_location_picker"
             or button != arcade.MOUSE_BUTTON_LEFT
-            or y >= self.height - 78
+            or y >= self.height - TOOLBAR_HEIGHT - 6
         ):
             return
 
@@ -1688,11 +1684,12 @@ class SimulationWindow(arcade.Window):
             entity_index
         ]
         entity["x"] = bounded_x
-        entity["y_offset"] = (
-            45.0 if entity_kind == "cars" and bounded_y > self.world.road_y
-            else -45.0 if entity_kind == "cars"
-            else bounded_y - self.world.road_y
-        )
+        if entity_kind == "cars":
+            entity["y_offset"] = (
+                LANE_OFFSET if bounded_y > self.world.road_y else -LANE_OFFSET
+            )
+        else:
+            entity["y_offset"] = bounded_y - self.world.road_y
         self.scenario_editor_message = (
             f"Location set to X {bounded_x:.0f}, Y {bounded_y:.0f}. "
             "Save to make it persistent."
@@ -2105,7 +2102,7 @@ class SimulationWindow(arcade.Window):
 
         speed_bar_y = panel_top - 93
         speed_bar_width = panel_width - 36
-        speed_ratio = min(speed_kmh / 200.0, 1.0)
+        speed_ratio = min(speed_kmh / MAX_CONFIGURABLE_VEHICLE_SPEED_KMH, 1.0)
         arcade.draw_lbwh_rectangle_filled(
             content_left, speed_bar_y, speed_bar_width, 8, (50, 61, 73)
         )

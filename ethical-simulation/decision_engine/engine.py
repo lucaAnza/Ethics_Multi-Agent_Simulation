@@ -15,6 +15,8 @@ from llm.parser import parse_decision
 from llm.prompt_builder import PromptBuilder
 from llm.schemas import PromptPackage
 
+from .modes import CODE_MODE, LLM_MODE
+
 
 DRIVING = "DRIVING"
 WAITING_FOR_LLM = "WAITING_FOR_LLM"
@@ -44,7 +46,7 @@ class CodeDecisionEngine:
         return EthicalDecision(
             action=decision.action,
             reason=decision.reason,
-            details={**decision.details, "mode": "code"},
+            details={**decision.details, "mode": CODE_MODE},
         )
 
 
@@ -135,7 +137,7 @@ class LLMDecisionEngine:
                     action=parsed.action,
                     reason=parsed.reason,
                     details={
-                        "mode": "llm-agent",
+                        "mode": LLM_MODE,
                         "model": raw_response.model,
                         "latency_ms": latency_ms,
                         "fallback": False,
@@ -193,7 +195,7 @@ class LLMDecisionEngine:
                     f"{safe_error_message(error)}. Safe fallback selected STAY."
                 ),
                 {
-                    "mode": "llm-agent",
+                    "mode": LLM_MODE,
                     "model": self.client.model_name,
                     "latency_ms": latency_ms,
                     "fallback": True,

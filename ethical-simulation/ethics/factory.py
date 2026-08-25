@@ -7,6 +7,7 @@ from copy import deepcopy
 from typing import Any
 
 from .base import EthicalFramework
+from .catalog import CONSTANT, KANT, UTILITARIANISM, VIRTUE_ETHICS
 from .constant import UTILITARIAN_EVALUATION, ConstantFramework
 from .kant import KantFramework
 from .rules import DEFAULT_RULE_ENABLED, DEFAULT_RULE_ORDER
@@ -24,15 +25,15 @@ def create_ethical_framework(
     settings = deepcopy(dict(framework_settings or {}))
     shared_values = dict(utilitarian_values or DEFAULT_ENTITIES_VALUES)
 
-    if framework_name == "Utilitarianism":
+    if framework_name == UTILITARIANISM:
         values = settings.get("entity_values", settings) or shared_values
         return UtilitarianFramework(dict(values))
-    if framework_name == "Kant":
+    if framework_name == KANT:
         return KantFramework(
             rule_order=settings.get("rule_order", DEFAULT_RULE_ORDER),
             enabled_rules=settings.get("enabled_rules", DEFAULT_RULE_ENABLED),
         )
-    if framework_name == "Constant":
+    if framework_name == CONSTANT:
         return ConstantFramework(
             enabled_rules=settings.get("enabled_rules", DEFAULT_RULE_ENABLED),
             conflict_resolution=settings.get(
@@ -41,6 +42,6 @@ def create_ethical_framework(
             ),
             entity_values=settings.get("entity_values", shared_values),
         )
-    if framework_name == "Virtue Ethics":
+    if framework_name == VIRTUE_ETHICS:
         return VirtueEthicsFramework()
     raise ValueError(f"Unknown ethical framework: {framework_name}")

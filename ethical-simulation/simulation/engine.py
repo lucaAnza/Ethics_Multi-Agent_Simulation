@@ -13,6 +13,7 @@ from decision_engine import (
     CodeDecisionEngine,
     LLMDecisionEngine,
 )
+from decision_engine.modes import CODE_MODE, LLM_MODE
 from ethics.base import (
     CHANGE_LANE,
     STAY,
@@ -23,10 +24,6 @@ from ethics.base import (
 from llm.errors import safe_error_message
 
 from .world import DetectedIncident, World
-
-
-CODE_MODE = "code"
-LLM_MODE = "llm-agent"
 
 
 @dataclass(frozen=True)

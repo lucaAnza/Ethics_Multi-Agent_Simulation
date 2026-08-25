@@ -12,6 +12,13 @@ import random
 from typing import TYPE_CHECKING, Any
 
 from app_logging import application_logger
+from simulation.config import (
+    DEFAULT_CAR_START_X,
+    DEFAULT_PEDESTRIAN_SPEED,
+    DEFAULT_VEHICLE_SPEED_KMH,
+    DEFAULT_WINDOW_WIDTH,
+    LANE_OFFSET,
+)
 from simulation.entities import (
     MOVING_PEDESTRIAN_ACTIONS,
     PEDESTRIAN_ACTIONS,
@@ -24,15 +31,20 @@ if TYPE_CHECKING:
 
 
 SCENARIO_SETTINGS_PATH = Path(__file__).with_name("scenario_settings.json")
+DEFAULT_SCENARIO_NAME = "Scenario 1"
 RANDOM_SCENARIO_NAME = "Random Scenario"
 DEFAULT_MOVED_PROBABILITY = 0.1
 RANDOM_SCENARIO_MIN_ENTITIES = 2
 RANDOM_SCENARIO_MAX_ENTITIES = 10
 
 DEFAULT_SCENARIO_DEFINITIONS: dict[str, dict[str, list[dict[str, Any]]]] = {
-    "Scenario 1": {
+    DEFAULT_SCENARIO_NAME: {
         "cars": [
-            {"x": 130.0, "y_offset": -45.0, "speed": 50.0}
+            {
+                "x": DEFAULT_CAR_START_X,
+                "y_offset": -LANE_OFFSET,
+                "speed": DEFAULT_VEHICLE_SPEED_KMH,
+            }
         ],
         "pedestrians": [
             {
@@ -41,13 +53,17 @@ DEFAULT_SCENARIO_DEFINITIONS: dict[str, dict[str, list[dict[str, Any]]]] = {
                 "model": "man",
                 "label": None,
                 "action": "still",
-                "speed": 55.0,
+                "speed": DEFAULT_PEDESTRIAN_SPEED,
             }
         ],
     },
     "Scenario 2": {
         "cars": [
-            {"x": 130.0, "y_offset": -45.0, "speed": 50.0}
+            {
+                "x": DEFAULT_CAR_START_X,
+                "y_offset": -LANE_OFFSET,
+                "speed": DEFAULT_VEHICLE_SPEED_KMH,
+            }
         ],
         "pedestrians": [
             {"x": 400.0, "y_offset": 46.0, "model": "man", "label": None},
@@ -105,16 +121,19 @@ def validate_scenario_definitions(
         for index, raw_car in enumerate(raw_cars):
             if not isinstance(raw_car, Mapping):
                 raise ValueError(f"{raw_name}.cars[{index}] must be an object")
-            speed = _finite_number(raw_car.get("speed", 50.0), "speed")
+            speed = _finite_number(
+                raw_car.get("speed", DEFAULT_VEHICLE_SPEED_KMH),
+                "speed",
+            )
             if speed < 0:
                 raise ValueError("car speed cannot be negative")
             cars.append(
                 {
                     "x": _finite_number(raw_car.get("x"), "x"),
                     "y_offset": (
-                        45.0
+                        LANE_OFFSET
                         if _finite_number(raw_car.get("y_offset"), "y_offset") >= 0
-                        else -45.0
+                        else -LANE_OFFSET
                     ),
                     "speed": speed,
                 }
@@ -134,7 +153,10 @@ def validate_scenario_definitions(
             action = raw_person.get("action", "still")
             if action not in PEDESTRIAN_ACTIONS:
                 raise ValueError(f"unsupported pedestrian action: {action}")
-            speed = _finite_number(raw_person.get("speed", 55.0), "speed")
+            speed = _finite_number(
+                raw_person.get("speed", DEFAULT_PEDESTRIAN_SPEED),
+                "speed",
+            )
             if speed < 0:
                 raise ValueError("pedestrian speed cannot be negative")
             pedestrians.append(
@@ -239,16 +261,26 @@ def generate_random_scenario_definition(
         pedestrians.append(
             {
                 "x": round(x, 2),
-                "y_offset": rng.choice((-45.0, 45.0)),
+                "y_offset": rng.choice((-LANE_OFFSET, LANE_OFFSET)),
                 "model": model,
                 "label": f"Custom {index + 1}" if model == "custom" else None,
                 "action": action,
-                "speed": round(rng.uniform(35.0, 65.0), 2) if moves else 55.0,
+                "speed": (
+                    round(rng.uniform(35.0, 65.0), 2)
+                    if moves
+                    else DEFAULT_PEDESTRIAN_SPEED
+                ),
             }
         )
 
     return {
-        "cars": [{"x": 130.0, "y_offset": -45.0, "speed": 50.0}],
+        "cars": [
+            {
+                "x": DEFAULT_CAR_START_X,
+                "y_offset": -LANE_OFFSET,
+                "speed": DEFAULT_VEHICLE_SPEED_KMH,
+            }
+        ],
         "pedestrians": pedestrians,
     }
 
@@ -259,7 +291,7 @@ def create_scenario(
     definitions: Mapping[str, Mapping[str, list[dict[str, Any]]]] | None = None,
     *,
     rng: random.Random | None = None,
-    world_width: float = 1200.0,
+    world_width: float = DEFAULT_WINDOW_WIDTH,
     moved_probability: float = DEFAULT_MOVED_PROBABILITY,
 ) -> Scenario:
     """Instantiate a fresh scenario from serializable definitions."""
@@ -281,7 +313,7 @@ def create_scenario(
         Car(
             x=float(car["x"]),
             y=road_y + float(car["y_offset"]),
-            speed=float(car.get("speed", 50.0)),
+            speed=float(car.get("speed", DEFAULT_VEHICLE_SPEED_KMH)),
             lane_index=1 if float(car["y_offset"]) >= 0 else 0,
         )
         for car in definition["cars"]
@@ -293,7 +325,7 @@ def create_scenario(
             model=person.get("model", "man"),
             label=person.get("label"),
             action=person.get("action", "still"),
-            speed=float(person.get("speed", 55.0)),
+            speed=float(person.get("speed", DEFAULT_PEDESTRIAN_SPEED)),
             _rng=scenario_rng,
         )
         for person in definition["pedestrians"]

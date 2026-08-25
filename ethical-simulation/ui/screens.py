@@ -10,29 +10,18 @@ import math
 import arcade
 import arcade.gui
 
-FRAMEWORK_NAMES = ["Utilitarianism", "Kant", "Constant", "Virtue Ethics"]
-
-ENTITY_MODEL_LABELS = {
-    "man": "Man",
-    "woman": "Woman",
-    "old_man": "Old man",
-    "old_woman": "Old woman",
-    "boy": "Boy",
-    "girl": "Girl",
-    "custom": "Custom",
-}
-
-PEDESTRIAN_ACTION_LABELS = {
-    "still": "Still",
-    "move_right": "Move right",
-    "move_left": "Move left",
-    "move_down": "Move down",
-    "move_up": "Move up",
-    "random_move": "Random move",
-}
-
-TEXT = (238, 243, 248)
-MUTED = (155, 170, 185)
+from decision_engine.modes import CODE_MODE, LLM_MODE
+from ethics.catalog import (
+    CONSTANT,
+    FRAMEWORK_IMPLEMENTATIONS,
+    FRAMEWORKS,
+    KANT,
+    LLM_FRAMEWORKS,
+    UTILITARIANISM,
+)
+from simulation.config import DEFAULT_PEDESTRIAN_SPEED
+from simulation.entities import PEDESTRIAN_ACTION_LABELS, PEDESTRIAN_MODEL_LABELS
+from ui.theme import MUTED, TEXT
 
 MEDAL_COLORS = (
     (212, 175, 55),   # Gold
@@ -284,7 +273,7 @@ def build_framework_settings(
 ]:
     framework_list = arcade.gui.UIBoxLayout(vertical=True, space_between=7)
     framework_list.add(_heading("FRAMEWORKS", "SELECT A FRAMEWORK", 205))
-    for framework_name in FRAMEWORK_NAMES:
+    for framework_name in FRAMEWORKS:
         prefix = "*  " if framework_name == selected else "   "
         variant = "selected" if framework_name == selected else "default"
         button = _button(
@@ -303,12 +292,7 @@ def build_framework_settings(
     additional_instructions_input: arcade.gui.UIInputText | None = None
     status = arcade.gui.UILabel(text="", width=490, height=24, font_size=10)
 
-    supports_llm = selected in {
-        "Utilitarianism",
-        "Kant",
-        "Constant",
-        "Virtue Ethics",
-    }
+    supports_llm = selected in LLM_FRAMEWORKS
     if supports_llm:
         mode_row = arcade.gui.UIBoxLayout(
             vertical=False,
@@ -316,10 +300,10 @@ def build_framework_settings(
             width=490,
             height=36,
         )
-        mode_options = (
-            (("llm-agent", "LLM Agent"),)
-            if selected == "Virtue Ethics"
-            else (("code", "Code"), ("llm-agent", "LLM Agent"))
+        mode_labels = {CODE_MODE: "Code", LLM_MODE: "LLM Agent"}
+        mode_options = tuple(
+            (mode, mode_labels[mode])
+            for mode in FRAMEWORK_IMPLEMENTATIONS[selected]
         )
         for mode, label in mode_options:
             selected_button = mode == selected_mode
@@ -336,7 +320,7 @@ def build_framework_settings(
             mode_row.add(mode_button)
         editor.add(mode_row)
 
-    if supports_llm and selected_mode == "llm-agent":
+    if supports_llm and selected_mode == LLM_MODE:
         editor.add(
             _heading(
                 f"{selected.upper()} — LLM AGENT",
@@ -409,7 +393,7 @@ def build_framework_settings(
                 variant="save",
             )
         )
-    elif selected == "Utilitarianism":
+    elif selected == UTILITARIANISM:
         editor.add(
             _heading(
                 "UTILITARIANISM",
@@ -452,7 +436,7 @@ def build_framework_settings(
             row.add(rank_holder)
             medal_dots[entity_model] = row.add(RankDot())
             entity_holder, _entity_label = _fixed_label(
-                ENTITY_MODEL_LABELS.get(entity_model, entity_model),
+                PEDESTRIAN_MODEL_LABELS.get(entity_model, entity_model),
                 width=174,
             )
             row.add(entity_holder)
@@ -505,8 +489,8 @@ def build_framework_settings(
         editor.add(ranking_layout)
         editor.add(status)
         editor.add(_button("Save Values", on_save, 180, variant="save"))
-    elif selected in {"Kant", "Constant"}:
-        is_kant = selected == "Kant"
+    elif selected in {KANT, CONSTANT}:
+        is_kant = selected == KANT
         editor.add(
             _heading(
                 selected.upper(),
@@ -1205,11 +1189,14 @@ def build_scenario_settings(
             text_color=MUTED,
         )
         model_row.add(model_holder)
-        selected_model_label = ENTITY_MODEL_LABELS.get(entity["model"], entity["model"])
+        selected_model_label = PEDESTRIAN_MODEL_LABELS.get(
+            entity["model"],
+            entity["model"],
+        )
         model_dropdown = model_row.add(
             arcade.gui.UIDropdown(
                 default=selected_model_label,
-                options=list(ENTITY_MODEL_LABELS.values()),
+                options=list(PEDESTRIAN_MODEL_LABELS.values()),
                 width=220,
                 height=36,
             )
@@ -1263,7 +1250,7 @@ def build_scenario_settings(
         )
         speed_row.add(speed_title_holder)
         speed_value_holder, speed_value_label = _fixed_label(
-            f"{entity.get('speed', 55.0):03.0f}",
+            f"{entity.get('speed', DEFAULT_PEDESTRIAN_SPEED):03.0f}",
             width=42,
             height=36,
             font_size=10,
@@ -1273,7 +1260,7 @@ def build_scenario_settings(
         speed_row.add(speed_value_holder)
         pedestrian_speed_slider = speed_row.add(
             arcade.gui.UISlider(
-                value=float(entity.get("speed", 55.0)),
+                value=float(entity.get("speed", DEFAULT_PEDESTRIAN_SPEED)),
                 min_value=0.0,
                 max_value=150.0,
                 step=5.0,

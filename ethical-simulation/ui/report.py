@@ -8,13 +8,11 @@ from typing import Any
 
 import arcade
 
+from decision_engine.modes import LLM_MODE
 from ethics.base import DecisionRecord
+from ui.theme import BORDER, MUTED, PANEL, TEXT
 
 
-TEXT = (238, 243, 248)
-MUTED = (155, 170, 185)
-PANEL = (25, 34, 45, 245)
-BORDER = (61, 76, 94)
 ACCENT = (42, 177, 230)
 
 CATEGORY_COLORS = {
@@ -157,7 +155,7 @@ class SimulationReportRenderer:
                 "POST-SIMULATION ETHICAL ANALYSIS  ·  IMPLEMENTATION: "
                 + (
                     "LLM AGENT"
-                    if data.implementation == "llm-agent"
+                    if data.implementation == LLM_MODE
                     else "CODE"
                 )
             ),
@@ -191,7 +189,7 @@ class SimulationReportRenderer:
             (metric_label.upper(), metric_value, (34, 197, 94)),
         ]
         average_latency = self._average_llm_latency(data)
-        if data.implementation == "llm-agent":
+        if data.implementation == LLM_MODE:
             summaries.append(
                 (
                     "AVG LLM TIME",
@@ -427,7 +425,7 @@ class SimulationReportRenderer:
         details = record.get("framework_details", {})
         if details.get("lane_change_blocked"):
             return "Lane change unavailable: maximum reached"
-        if record.get("mode") == "llm-agent":
+        if record.get("mode") == LLM_MODE:
             suffix = " · FALLBACK" if record.get("fallback") else ""
             return (
                 f"LLM: {record.get('model', 'Unknown')} · "

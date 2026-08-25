@@ -7,6 +7,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, TypeAlias
 
+from simulation.entities import PEDESTRIAN_CATEGORY_PLURALS, pedestrian_category
+
 
 STAY = "STAY"
 CHANGE_LANE = "CHANGE_LANE"
@@ -95,33 +97,19 @@ class EthicalFramework(ABC):
 
     @staticmethod
     def _describe_lane(entities: list[EntitySnapshot]) -> str:
-        categories = {
-            "boy": "Child",
-            "girl": "Child",
-            "man": "Adult",
-            "woman": "Adult",
-            "old_man": "Elderly",
-            "old_woman": "Elderly",
-            "custom": "Custom",
-        }
         counts: dict[str, int] = {}
         for entity in entities:
             model = str(entity.get("model", "custom"))
-            category = categories.get(model, model.replace("_", " ").title())
+            category = pedestrian_category(model)
             counts[category] = counts.get(category, 0) + 1
         if not counts:
             return "No visible entities"
-        plurals = {
-            "Child": "Children",
-            "Adult": "Adults",
-            "Elderly": "Elderly",
-            "Custom": "Custom",
-        }
         descriptions = []
         for category, count in counts.items():
-            display_category = category if count == 1 else plurals.get(
-                category,
-                f"{category}s",
+            display_category = (
+                category
+                if count == 1
+                else PEDESTRIAN_CATEGORY_PLURALS.get(category, f"{category}s")
             )
             descriptions.append(f"{count} {display_category}")
         return ", ".join(descriptions)

@@ -7,12 +7,10 @@ from typing import Any
 import arcade
 
 from automated import BatchProgress, BatchReport
+from decision_engine.modes import LLM_MODE
+from ui.theme import BORDER, MUTED, PANEL, TEXT
 
 
-TEXT = (238, 243, 248)
-MUTED = (155, 170, 185)
-PANEL = (25, 34, 45, 245)
-BORDER = (61, 76, 94)
 ACCENT = (14, 165, 233)
 
 
@@ -239,7 +237,7 @@ class BatchReportRenderer:
             ("AVG DECISIONS", f"{report.average_decisions:.2f}", (34, 197, 94)),
         ]
         has_llm_results = any(
-            result.implementation == "llm-agent" for result in report.results
+            result.implementation == LLM_MODE for result in report.results
         )
         if report.decision_agreement_rate is not None:
             cards.append(
@@ -400,7 +398,7 @@ class BatchReportRenderer:
             ("Lane-change distribution", lane_distribution),
         ]
         rows.extend(report.average_framework_metrics.items())
-        if any(result.implementation == "llm-agent" for result in report.results):
+        if any(result.implementation == LLM_MODE for result in report.results):
             rows.extend(
                 [
                     ("LLM calls", str(report.total_llm_calls)),

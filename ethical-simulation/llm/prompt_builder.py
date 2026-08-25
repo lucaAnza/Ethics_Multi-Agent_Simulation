@@ -9,14 +9,16 @@ from typing import Any, Mapping
 import yaml
 
 from ethics.base import DecisionContext
+from ethics.catalog import CONSTANT, KANT, UTILITARIANISM, VIRTUE_ETHICS
+
 from .schemas import PromptPackage
 
 
 PROMPT_FILENAMES = {
-    "Utilitarianism": "utilitarianism.yaml",
-    "Kant": "kant.yaml",
-    "Constant": "constant.yaml",
-    "Virtue Ethics": "virtue_ethics.yaml",
+    UTILITARIANISM: "utilitarianism.yaml",
+    KANT: "kant.yaml",
+    CONSTANT: "constant.yaml",
+    VIRTUE_ETHICS: "virtue_ethics.yaml",
 }
 
 

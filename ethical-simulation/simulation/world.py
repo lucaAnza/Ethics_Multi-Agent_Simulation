@@ -22,7 +22,22 @@ def _require_arcade():
         arcade = arcade_module
     return arcade
 
-from scenarios import DEFAULT_MOVED_PROBABILITY, create_scenario
+from scenarios import DEFAULT_MOVED_PROBABILITY, DEFAULT_SCENARIO_NAME, create_scenario
+from simulation.config import (
+    CAR_HALF_LENGTH as _CAR_HALF_LENGTH,
+    CAR_HALF_WIDTH as _CAR_HALF_WIDTH,
+    DEFAULT_DECISION_DISTANCE,
+    DEFAULT_MAX_LANE_CHANGES,
+    DEFAULT_VISION_DISTANCE,
+    LANE_CHANGE_DURATION as _LANE_CHANGE_DURATION,
+    LANE_HALF_WIDTH as _LANE_HALF_WIDTH,
+    LANE_OFFSET as _LANE_OFFSET,
+    MIN_DECISION_DISTANCE,
+    MIN_VISION_DISTANCE,
+    ROAD_HALF_HEIGHT as _ROAD_HALF_HEIGHT,
+    TOP_TOOLBAR_HEIGHT,
+    TUNNEL_MARGIN as _TUNNEL_MARGIN,
+)
 from simulation.entities import Car, Pedestrian
 
 
@@ -37,19 +52,19 @@ class DetectedIncident:
 class World:
     """Own all physical and perceptual state independently from ethical policy."""
 
-    ROAD_HALF_HEIGHT = 90.0
-    LANE_OFFSET = 45.0
-    LANE_HALF_WIDTH = 30.0
-    CAR_HALF_LENGTH = 38.0
-    CAR_HALF_WIDTH = 20.0
-    LANE_CHANGE_DURATION = 0.10
-    TUNNEL_MARGIN = 105.0
+    ROAD_HALF_HEIGHT = _ROAD_HALF_HEIGHT
+    LANE_OFFSET = _LANE_OFFSET
+    LANE_HALF_WIDTH = _LANE_HALF_WIDTH
+    CAR_HALF_LENGTH = _CAR_HALF_LENGTH
+    CAR_HALF_WIDTH = _CAR_HALF_WIDTH
+    LANE_CHANGE_DURATION = _LANE_CHANGE_DURATION
+    TUNNEL_MARGIN = _TUNNEL_MARGIN
 
     def __init__(
         self,
         width: int,
         height: int,
-        scenario: str = "Scenario 1",
+        scenario: str = DEFAULT_SCENARIO_NAME,
         scenario_definitions: Mapping[
             str, Mapping[str, list[dict[str, Any]]]
         ] | None = None,
@@ -67,9 +82,9 @@ class World:
         self.rendering_enabled = rendering_enabled
         self.cars: list[Car] = []
         self.pedestrians: list[Pedestrian] = []
-        self.vision_distance = 300.0
-        self.decision_distance = 120.0
-        self.max_spostamenti = 2
+        self.vision_distance = DEFAULT_VISION_DISTANCE
+        self.decision_distance = DEFAULT_DECISION_DISTANCE
+        self.max_spostamenti = DEFAULT_MAX_LANE_CHANGES
         self.lane_changes_used = 0
         self.reached_tunnel = False
         self._handled_incident_ids: set[int] = set()
@@ -102,7 +117,7 @@ class World:
 
     @property
     def road_y(self) -> float:
-        return max(190.0, (self.height - 72) * 0.48)
+        return max(190.0, (self.height - TOP_TOOLBAR_HEIGHT) * 0.48)
 
     @property
     def lane_centers(self) -> tuple[float, float]:
@@ -129,9 +144,12 @@ class World:
     ) -> None:
         """Update simulation-owned perception and lane-change limits."""
         if vision_distance is not None:
-            self.vision_distance = max(50.0, float(vision_distance))
+            self.vision_distance = max(MIN_VISION_DISTANCE, float(vision_distance))
         if decision_distance is not None:
-            self.decision_distance = max(10.0, float(decision_distance))
+            self.decision_distance = max(
+                MIN_DECISION_DISTANCE,
+                float(decision_distance),
+            )
         self.decision_distance = min(self.decision_distance, self.vision_distance)
         if max_spostamenti is not None:
             self.max_spostamenti = max(
@@ -180,7 +198,7 @@ class World:
         return True
 
     def _update_pedestrians(self, delta_time: float) -> None:
-        playable_top = self.height - 72 - 12
+        playable_top = self.height - TOP_TOOLBAR_HEIGHT - 12
         for pedestrian in self.pedestrians:
             pedestrian.update(delta_time)
             bounded_x = min(max(pedestrian.x, 12.0), self.width - 12.0)

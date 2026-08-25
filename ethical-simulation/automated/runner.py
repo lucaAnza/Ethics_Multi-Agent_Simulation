@@ -10,10 +10,10 @@ from time import monotonic
 from typing import Callable
 
 from app_logging import application_logger
-from decision_engine import LLMDecisionEngine
+from decision_engine import CODE_MODE, LLM_MODE, LLMDecisionEngine
 from ethics.factory import create_ethical_framework
 from llm import GeminiClient, PromptBuilder
-from simulation.engine import LLM_MODE, SimulationEngine
+from simulation.engine import SimulationEngine
 from simulation.statistics import casualty_category_counts
 from simulation.world import World
 
@@ -133,9 +133,13 @@ class AutomatedSimulationRunner:
                 pair_id = run_index + 1 if config.mode == COMPARISON else None
                 results_before_unit = len(results)
                 implementations = (
-                    ("code", LLM_MODE)
+                    (CODE_MODE, LLM_MODE)
                     if config.mode == COMPARISON
-                    else (("code",) if config.mode == ONLY_DETERMINISTIC else (LLM_MODE,))
+                    else (
+                        (CODE_MODE,)
+                        if config.mode == ONLY_DETERMINISTIC
+                        else (LLM_MODE,)
+                    )
                 )
                 for implementation in implementations:
                     if self._cancel_event.is_set():
