@@ -58,11 +58,12 @@ from ethics.kant import KantFramework
 from ethics.rules import DEFAULT_RULE_ENABLED, DEFAULT_RULE_ORDER, MORAL_RULES
 from llm import GeminiClient, PromptBuilder
 from scenarios import (
-    DEFAULT_MOVED_PROBABILITY,
     DEFAULT_SCENARIO_NAME,
     RANDOM_SCENARIO_NAME,
-    load_scenario_definitions,
-    save_scenario_definitions,
+    RANDOM_SETTING_VALUE,
+    RandomScenarioSettings,
+    load_scenario_settings,
+    save_scenario_settings,
 )
 from simulation import SimulationDecisionEvent, SimulationEngine, World
 from simulation.config import (
@@ -75,7 +76,12 @@ from simulation.config import (
     DEFAULT_WINDOW_HEIGHT as SCREEN_HEIGHT,
     DEFAULT_WINDOW_WIDTH as SCREEN_WIDTH,
     LANE_OFFSET,
+    MAX_CONFIGURABLE_DECISION_DISTANCE,
+    MAX_CONFIGURABLE_LANE_CHANGES,
     MAX_CONFIGURABLE_VEHICLE_SPEED_KMH,
+    MAX_CONFIGURABLE_VISION_DISTANCE,
+    MIN_CONFIGURABLE_DECISION_DISTANCE,
+    MIN_CONFIGURABLE_VISION_DISTANCE,
     TOP_TOOLBAR_HEIGHT as TOOLBAR_HEIGHT,
 )
 from simulation.entities import (
@@ -96,8 +102,10 @@ from ui.screens import (
     build_menu,
     build_placeholder,
     build_report_navigation,
+    build_random_scenario_settings,
     build_scenario_settings,
 )
+from ui.theme import FRAMEWORK_SELECTION, SCENARIO_SELECTION, dropdown_styles
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 load_dotenv(PROJECT_ROOT / ".env")
@@ -138,7 +146,9 @@ class SimulationWindow(arcade.Window):
         self.current_framework = UTILITARIANISM
         self.current_implementation = CODE_MODE
         self.framework_editor_mode = CODE_MODE
-        self.scenario_definitions = load_scenario_definitions()
+        stored_scenario_settings = load_scenario_settings()
+        self.scenario_definitions = stored_scenario_settings.definitions
+        self.random_scenario_settings = stored_scenario_settings.random_scenario
         self.scenario_names = [*self.scenario_definitions, RANDOM_SCENARIO_NAME]
         self.current_scenario = (
             DEFAULT_SCENARIO_NAME
@@ -151,6 +161,9 @@ class SimulationWindow(arcade.Window):
         self.vision_distance = DEFAULT_VISION_DISTANCE
         self.decision_distance = DEFAULT_DECISION_DISTANCE
         self.max_spostamenti = DEFAULT_MAX_LANE_CHANGES
+        self.fixed_vision_distance = self.vision_distance
+        self.fixed_decision_distance = self.decision_distance
+        self.fixed_max_spostamenti = self.max_spostamenti
         self.simulation_finished = False
         self.last_decision: EthicalDecision | None = None
         self.decision_phase = DRIVING
@@ -161,6 +174,7 @@ class SimulationWindow(arcade.Window):
             self.height,
             self.current_scenario,
             self.scenario_definitions,
+            random_scenario_settings=self.random_scenario_settings,
         )
         self.world.configure_vehicle(
             vision_distance=self.vision_distance,
@@ -217,9 +231,10 @@ class SimulationWindow(arcade.Window):
             for name, definition in self.scenario_definitions.items()
         }
         self.scenario_initial_speeds[RANDOM_SCENARIO_NAME] = (
-            DEFAULT_VEHICLE_SPEED_KMH
+            self.random_scenario_settings.initial_speed
         )
         self.scenario_editor_draft = deepcopy(self.scenario_definitions)
+        self.random_scenario_settings_draft = self.random_scenario_settings
         self.scenario_editor_scenario = self.current_scenario
         self.scenario_editor_entity = ("cars", 0)
         self.scenario_editor_inputs: dict[str, arcade.gui.UIInputText] = {}
@@ -227,6 +242,8 @@ class SimulationWindow(arcade.Window):
         self.scenario_editor_action: arcade.gui.UIDropdown | None = None
         self.scenario_editor_pedestrian_speed: arcade.gui.UISlider | None = None
         self.scenario_editor_status: arcade.gui.UILabel | None = None
+        self.random_scenario_inputs: dict[str, arcade.gui.UIInputText] = {}
+        self.random_scenario_dropdowns: dict[str, arcade.gui.UIDropdown] = {}
         self.scenario_editor_message = ""
         self.scenario_location_preview: World | None = None
         self.scenario_location_cursor = (self.width / 2, self.height / 2)
@@ -257,12 +274,8 @@ class SimulationWindow(arcade.Window):
             COMPARISON: str(DEFAULT_COMPARISON_BATCH_SIZE),
         }
         self.automated_seed = ""
-        self.automated_moved_probability = f"{DEFAULT_MOVED_PROBABILITY:.2f}"
         self.automated_count_input: arcade.gui.UIInputText | None = None
         self.automated_seed_input: arcade.gui.UIInputText | None = None
-        self.automated_moved_probability_input: (
-            arcade.gui.UIInputText | None
-        ) = None
         self.automated_status_label: arcade.gui.UILabel | None = None
         self.automated_cancel_button: arcade.gui.UIFlatButton | None = None
         self.last_batch_config: BatchConfig | None = None
@@ -316,6 +329,7 @@ class SimulationWindow(arcade.Window):
                 options=FRAMEWORK_OPTIONS,
                 width=160,
                 height=34,
+                **dropdown_styles(FRAMEWORK_SELECTION),
             )
         )
         scenario = selection_controls.add(
@@ -324,6 +338,7 @@ class SimulationWindow(arcade.Window):
                 options=self.scenario_names,
                 width=132,
                 height=34,
+                **dropdown_styles(SCENARIO_SELECTION),
             )
         )
         automated_button = selection_controls.add(
@@ -396,8 +411,8 @@ class SimulationWindow(arcade.Window):
         self.vision_distance_slider = vehicle_controls.add(
             arcade.gui.UISlider(
                 value=self.vision_distance,
-                min_value=150,
-                max_value=500,
+                min_value=MIN_CONFIGURABLE_VISION_DISTANCE,
+                max_value=MAX_CONFIGURABLE_VISION_DISTANCE,
                 step=10,
                 width=34,
                 height=26,
@@ -412,8 +427,8 @@ class SimulationWindow(arcade.Window):
         self.decision_distance_slider = vehicle_controls.add(
             arcade.gui.UISlider(
                 value=self.decision_distance,
-                min_value=30,
-                max_value=250,
+                min_value=MIN_CONFIGURABLE_DECISION_DISTANCE,
+                max_value=MAX_CONFIGURABLE_DECISION_DISTANCE,
                 step=10,
                 width=34,
                 height=26,
@@ -429,7 +444,7 @@ class SimulationWindow(arcade.Window):
             arcade.gui.UISlider(
                 value=self.max_spostamenti,
                 min_value=0,
-                max_value=10,
+                max_value=MAX_CONFIGURABLE_LANE_CHANGES,
                 step=1,
                 width=32,
                 height=26,
@@ -497,19 +512,49 @@ class SimulationWindow(arcade.Window):
         self.simulation_engine.reset(reset_framework=False)
         self._sync_simulation_engine_state()
 
-    def _scenario_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
-        if event.new_value is not None:
-            self.current_scenario = event.new_value
-            self.world.reset(self.current_scenario)
+    def _apply_current_scenario_vehicle_settings(self) -> None:
+        """Apply fixed settings or adopt values resolved by Random Scenario."""
+        car = self.world.primary_car
+        if car is None:
+            return
+        if self.current_scenario == RANDOM_SCENARIO_NAME:
+            self.vision_distance = self.world.vision_distance
+            self.decision_distance = self.world.decision_distance
+            self.max_spostamenti = self.world.max_spostamenti
+            self.scenario_initial_speeds[RANDOM_SCENARIO_NAME] = car.speed
+        else:
+            self.vision_distance = self.fixed_vision_distance
+            self.decision_distance = self.fixed_decision_distance
+            self.max_spostamenti = self.fixed_max_spostamenti
             self.world.configure_vehicle(
                 vision_distance=self.vision_distance,
                 decision_distance=self.decision_distance,
                 max_spostamenti=self.max_spostamenti,
             )
-            speed = self.scenario_initial_speeds[self.current_scenario]
-            self.world.cars[0].speed = speed
-            self.initial_speed_slider.value = speed
-            self.initial_speed_label.text = f"Speed {speed:02.0f}"
+            car.speed = self.scenario_initial_speeds[self.current_scenario]
+
+    def _sync_vehicle_control_values(self) -> None:
+        """Refresh toolbar widgets after a scenario resolves random values."""
+        car = self.world.primary_car
+        if car is None or not hasattr(self, "initial_speed_slider"):
+            return
+        self.initial_speed_slider.value = car.speed
+        self.initial_speed_label.text = f"Speed {car.speed:02.0f}"
+        self.vision_distance_slider.value = self.vision_distance
+        self.vision_distance_label.text = f"Vision {self.vision_distance:.0f}"
+        self.decision_distance_slider.value = self.decision_distance
+        self.decision_distance_label.text = (
+            f"Decision {self.decision_distance:.0f}"
+        )
+        self.max_spostamenti_slider.value = self.max_spostamenti
+        self.max_spostamenti_label.text = f"Max shifts {self.max_spostamenti}"
+
+    def _scenario_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
+        if event.new_value is not None:
+            self.current_scenario = event.new_value
+            self.world.reset(self.current_scenario)
+            self._apply_current_scenario_vehicle_settings()
+            self._sync_vehicle_control_values()
             self.reset_button.text = (
                 "Regenerate"
                 if self.current_scenario == RANDOM_SCENARIO_NAME
@@ -544,6 +589,9 @@ class SimulationWindow(arcade.Window):
                 vision_distance=self.vision_distance,
                 decision_distance=self.decision_distance,
             )
+            if self.current_scenario != RANDOM_SCENARIO_NAME:
+                self.fixed_vision_distance = self.vision_distance
+                self.fixed_decision_distance = self.decision_distance
 
     def _decision_distance_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
         if event.new_value is not None:
@@ -557,6 +605,8 @@ class SimulationWindow(arcade.Window):
             self.world.configure_vehicle(
                 decision_distance=self.decision_distance,
             )
+            if self.current_scenario != RANDOM_SCENARIO_NAME:
+                self.fixed_decision_distance = self.decision_distance
 
     def _max_spostamenti_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
         if event.new_value is not None:
@@ -566,6 +616,8 @@ class SimulationWindow(arcade.Window):
             if requested_max != self.max_spostamenti:
                 self.max_spostamenti_slider.value = self.max_spostamenti
             self.max_spostamenti_label.text = f"Max shifts {self.max_spostamenti}"
+            if self.current_scenario != RANDOM_SCENARIO_NAME:
+                self.fixed_max_spostamenti = self.max_spostamenti
 
     def _play(self, _event: arcade.gui.UIOnClickEvent) -> None:
         if self.simulation_finished:
@@ -632,12 +684,8 @@ class SimulationWindow(arcade.Window):
 
     def _stop(self, _event: arcade.gui.UIOnClickEvent) -> None:
         self.world.reset()
-        self.world.configure_vehicle(
-            vision_distance=self.vision_distance,
-            decision_distance=self.decision_distance,
-            max_spostamenti=self.max_spostamenti,
-        )
-        self.world.cars[0].speed = self.scenario_initial_speeds[self.current_scenario]
+        self._apply_current_scenario_vehicle_settings()
+        self._sync_vehicle_control_values()
         self._reset_run_state()
 
     def _show_simulation_end(self) -> None:
@@ -969,9 +1017,11 @@ class SimulationWindow(arcade.Window):
         self, _event: arcade.gui.UIOnClickEvent | None = None
     ) -> None:
         self.scenario_editor_draft = deepcopy(self.scenario_definitions)
+        self.random_scenario_settings_draft = self.random_scenario_settings
         self.scenario_editor_scenario = (
             self.current_scenario
-            if self.current_scenario in self.scenario_editor_draft
+            if self.current_scenario
+            in (*self.scenario_editor_draft, RANDOM_SCENARIO_NAME)
             else next(iter(self.scenario_editor_draft))
         )
         self.scenario_editor_entity = ("cars", 0)
@@ -981,6 +1031,23 @@ class SimulationWindow(arcade.Window):
     def _show_scenario_editor(self) -> None:
         self.active_screen = "scenario_settings"
         self.manager.clear()
+        scenario_names = [*self.scenario_editor_draft, RANDOM_SCENARIO_NAME]
+        if self.scenario_editor_scenario == RANDOM_SCENARIO_NAME:
+            (
+                self.random_scenario_inputs,
+                self.random_scenario_dropdowns,
+                self.scenario_editor_status,
+            ) = build_random_scenario_settings(
+                self.manager,
+                scenario_names=scenario_names,
+                selected_scenario=self.scenario_editor_scenario,
+                settings=self.random_scenario_settings_draft,
+                message=self.scenario_editor_message,
+                on_select_scenario=self._select_scenario_to_edit,
+                on_save=self._save_scenario_settings,
+                on_back=self._open_menu,
+            )
+            return
         definition = self.scenario_editor_draft[self.scenario_editor_scenario]
         entity_kind, entity_index = self.scenario_editor_entity
         if (
@@ -996,7 +1063,7 @@ class SimulationWindow(arcade.Window):
             self.scenario_editor_status,
         ) = build_scenario_settings(
             self.manager,
-            scenario_names=list(self.scenario_editor_draft),
+            scenario_names=scenario_names,
             selected_scenario=self.scenario_editor_scenario,
             scenario_definition=definition,
             selected_entity=self.scenario_editor_entity,
@@ -1018,8 +1085,11 @@ class SimulationWindow(arcade.Window):
             self.scenario_editor_status.text = message
             self.scenario_editor_status.update_font(font_color=(248, 113, 113))
 
-    def _commit_scenario_entity_form(self) -> bool:
-        """Copy the visible form into the in-memory editor draft."""
+    def _commit_scenario_editor_form(self) -> bool:
+        """Copy the visible fixed or random form into its in-memory draft."""
+        if self.scenario_editor_scenario == RANDOM_SCENARIO_NAME:
+            return self._commit_random_scenario_form()
+
         entity_kind, entity_index = self.scenario_editor_entity
         entity = self.scenario_editor_draft[self.scenario_editor_scenario][entity_kind][
             entity_index
@@ -1091,15 +1161,42 @@ class SimulationWindow(arcade.Window):
             self.scenario_editor_message = "Unsaved changes."
         return True
 
+    def _commit_random_scenario_form(self) -> bool:
+        values: dict[str, object] = {}
+        for key, widget in self.random_scenario_inputs.items():
+            try:
+                values[key] = float(widget.text.strip())
+            except ValueError:
+                widget.invalid = True
+                self._set_scenario_editor_error(
+                    f"Enter a valid numeric value for {key.replace('_', ' ')}."
+                )
+                return False
+            widget.invalid = False
+
+        if self.random_scenario_dropdowns["vision_mode"].value == "Random":
+            values["vision_distance"] = RANDOM_SETTING_VALUE
+        if self.random_scenario_dropdowns["max_shifts_mode"].value == "Random":
+            values["max_shifts"] = RANDOM_SETTING_VALUE
+        try:
+            updated = RandomScenarioSettings.from_mapping(values)
+        except ValueError as error:
+            self._set_scenario_editor_error(str(error))
+            return False
+        if updated != self.random_scenario_settings_draft:
+            self.random_scenario_settings_draft = updated
+            self.scenario_editor_message = "Unsaved random generator changes."
+        return True
+
     def _select_scenario_to_edit(self, scenario_name: str) -> None:
-        if not self._commit_scenario_entity_form():
+        if not self._commit_scenario_editor_form():
             return
         self.scenario_editor_scenario = scenario_name
         self.scenario_editor_entity = ("cars", 0)
         self._show_scenario_editor()
 
     def _select_scenario_entity(self, entity_kind: str, entity_index: int) -> None:
-        if not self._commit_scenario_entity_form():
+        if not self._commit_scenario_editor_form():
             return
         self.scenario_editor_entity = (entity_kind, entity_index)
         self._show_scenario_editor()
@@ -1107,7 +1204,7 @@ class SimulationWindow(arcade.Window):
     def _add_scenario_car(
         self, _event: arcade.gui.UIOnClickEvent | None = None
     ) -> None:
-        if not self._commit_scenario_entity_form():
+        if not self._commit_scenario_editor_form():
             return
         cars = self.scenario_editor_draft[self.scenario_editor_scenario]["cars"]
         cars.append(
@@ -1124,7 +1221,7 @@ class SimulationWindow(arcade.Window):
     def _add_scenario_pedestrian(
         self, _event: arcade.gui.UIOnClickEvent | None = None
     ) -> None:
-        if not self._commit_scenario_entity_form():
+        if not self._commit_scenario_editor_form():
             return
         pedestrians = self.scenario_editor_draft[self.scenario_editor_scenario][
             "pedestrians"
@@ -1146,7 +1243,7 @@ class SimulationWindow(arcade.Window):
     def _open_scenario_location_picker(
         self, _event: arcade.gui.UIOnClickEvent | None = None
     ) -> None:
-        if not self._commit_scenario_entity_form():
+        if not self._commit_scenario_editor_form():
             return
         entity_kind, entity_index = self.scenario_editor_entity
         entity_name = (
@@ -1203,33 +1300,34 @@ class SimulationWindow(arcade.Window):
     def _save_scenario_settings(
         self, _event: arcade.gui.UIOnClickEvent | None = None
     ) -> None:
-        if not self._commit_scenario_entity_form():
+        if not self._commit_scenario_editor_form():
             return
         try:
-            saved_definitions = save_scenario_definitions(
-                self.scenario_editor_draft
+            saved_settings = save_scenario_settings(
+                self.scenario_editor_draft,
+                self.random_scenario_settings_draft,
             )
         except (OSError, ValueError) as error:
             self._set_scenario_editor_error(f"Could not save scenarios: {error}")
             return
 
-        self.scenario_definitions = saved_definitions
-        self.scenario_editor_draft = deepcopy(saved_definitions)
-        self.scenario_names = [*saved_definitions, RANDOM_SCENARIO_NAME]
+        self.scenario_definitions = saved_settings.definitions
+        self.random_scenario_settings = saved_settings.random_scenario
+        self.scenario_editor_draft = deepcopy(saved_settings.definitions)
+        self.random_scenario_settings_draft = saved_settings.random_scenario
+        self.scenario_names = [*saved_settings.definitions, RANDOM_SCENARIO_NAME]
         self.scenario_initial_speeds = {
             name: float(definition["cars"][0]["speed"])
-            for name, definition in saved_definitions.items()
+            for name, definition in saved_settings.definitions.items()
         }
         self.scenario_initial_speeds[RANDOM_SCENARIO_NAME] = (
-            DEFAULT_VEHICLE_SPEED_KMH
+            self.random_scenario_settings.initial_speed
         )
-        self.world.set_scenario_definitions(saved_definitions)
+        self.world.set_scenario_definitions(saved_settings.definitions)
+        self.world.set_random_scenario_settings(self.random_scenario_settings)
         self.world.reset(self.current_scenario)
-        self.world.configure_vehicle(
-            vision_distance=self.vision_distance,
-            decision_distance=self.decision_distance,
-            max_spostamenti=self.max_spostamenti,
-        )
+        self._apply_current_scenario_vehicle_settings()
+        self._sync_vehicle_control_values()
         self._reset_run_state()
         self.scenario_editor_message = "Scenarios saved and applied to the simulation."
         if self.scenario_editor_status is not None:
@@ -1274,10 +1372,6 @@ class SimulationWindow(arcade.Window):
             )
         if self.automated_seed_input is not None:
             self.automated_seed = self.automated_seed_input.text.strip()
-        if self.automated_moved_probability_input is not None:
-            self.automated_moved_probability = (
-                self.automated_moved_probability_input.text.strip()
-            )
 
     def _open_automated_settings(
         self,
@@ -1297,7 +1391,6 @@ class SimulationWindow(arcade.Window):
         (
             self.automated_count_input,
             self.automated_seed_input,
-            self.automated_moved_probability_input,
             self.automated_status_label,
         ) = build_automated_settings(
             self.manager,
@@ -1306,8 +1399,7 @@ class SimulationWindow(arcade.Window):
             framework=self._automated_framework_display(),
             scenario=self.automated_scenario,
             random_seed=self.automated_seed,
-            moved_probability=self.automated_moved_probability,
-            show_random_options=(
+            random_scenario_selected=(
                 self.automated_scenario == RANDOM_SCENARIO_NAME
             ),
             mode_options=[ONLY_DETERMINISTIC, ONLY_LLM, COMPARISON],
@@ -1374,22 +1466,13 @@ class SimulationWindow(arcade.Window):
             seed = int(self.automated_seed) if self.automated_seed else None
         except ValueError as error:
             raise ValueError("Random seed must be an integer or left empty") from error
-        moved_probability = DEFAULT_MOVED_PROBABILITY
-        if self.automated_scenario == RANDOM_SCENARIO_NAME:
-            try:
-                moved_probability = float(self.automated_moved_probability)
-            except ValueError as error:
-                raise ValueError("Movement probability must be numeric") from error
-            if not 0.0 <= moved_probability <= 1.0:
-                raise ValueError("Movement probability must be between 0 and 1")
-
         return BatchConfig(
             mode=self.automated_mode,
             number_of_runs=count,
             framework_name=self.automated_framework,
             scenario_name=self.automated_scenario,
             random_seed=seed,
-            moved_probability=moved_probability,
+            random_scenario_settings=self.random_scenario_settings.to_dict(),
             scenario_definitions=deepcopy(self.scenario_definitions),
             framework_settings=self._framework_configuration(
                 self.automated_framework
@@ -1403,9 +1486,9 @@ class SimulationWindow(arcade.Window):
             ),
             world_width=self.width,
             world_height=self.height,
-            vision_distance=self.vision_distance,
-            decision_distance=self.decision_distance,
-            max_lane_changes=self.max_spostamenti,
+            vision_distance=self.fixed_vision_distance,
+            decision_distance=self.fixed_decision_distance,
+            max_lane_changes=self.fixed_max_spostamenti,
         )
 
     def _start_automated_batch(

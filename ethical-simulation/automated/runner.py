@@ -13,6 +13,7 @@ from app_logging import application_logger
 from decision_engine import CODE_MODE, LLM_MODE, LLMDecisionEngine
 from ethics.factory import create_ethical_framework
 from llm import GeminiClient, PromptBuilder
+from scenarios import RANDOM_SCENARIO_NAME
 from simulation.engine import SimulationEngine
 from simulation.statistics import casualty_category_counts
 from simulation.world import World
@@ -227,14 +228,15 @@ class AutomatedSimulationRunner:
             config.scenario_name,
             config.scenario_definitions,
             random_seed=seed,
-            moved_probability=config.moved_probability,
+            random_scenario_settings=config.random_scenario_settings,
             rendering_enabled=False,
         )
-        world.configure_vehicle(
-            vision_distance=config.vision_distance,
-            decision_distance=config.decision_distance,
-            max_spostamenti=config.max_lane_changes,
-        )
+        if config.scenario_name != RANDOM_SCENARIO_NAME:
+            world.configure_vehicle(
+                vision_distance=config.vision_distance,
+                decision_distance=config.decision_distance,
+                max_spostamenti=config.max_lane_changes,
+            )
         llm_engine = self._llm_engine_factory() if implementation == LLM_MODE else None
         engine = SimulationEngine(
             world=world,

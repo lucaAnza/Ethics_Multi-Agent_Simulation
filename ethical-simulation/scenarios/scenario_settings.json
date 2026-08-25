@@ -1,5 +1,15 @@
 {
-  "version": 2,
+  "version": 3,
+  "random_scenario": {
+    "min_entities": 2,
+    "max_entities": 10,
+    "initial_speed": 100.0,
+    "vision_distance": 300.0,
+    "decision_distance": 120.0,
+    "max_shifts": 2,
+    "crazy_driver_probability": 0.1,
+    "pedestrian_movement_probability": 0.1
+  },
   "scenarios": {
     "Scenario 1": {
       "cars": [

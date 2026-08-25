@@ -25,19 +25,19 @@ if TYPE_CHECKING:
 
 from .config import (
     DEFAULT_CAR_START_X,
-    DEFAULT_MOVED_PROBABILITY,
     DEFAULT_PEDESTRIAN_SPEED,
+    DEFAULT_RANDOM_SCENARIO_SETTINGS,
     DEFAULT_SCENARIO_DEFINITIONS,
     DEFAULT_VEHICLE_SPEED_KMH,
     LANE_OFFSET,
-    RANDOM_SCENARIO_MAX_ENTITIES,
-    RANDOM_SCENARIO_MIN_ENTITIES,
     RANDOM_PEDESTRIAN_SPEED_RANGE,
     RANDOM_SCENARIO_END_MARGIN,
     RANDOM_SCENARIO_FIRST_ENTITY_X,
     RANDOM_SCENARIO_NAME,
     RANDOM_SCENARIO_POSITION_JITTER_RATIO,
     REMOVED_SCENARIO_NAMES,
+    RandomScenarioSettings,
+    ResolvedRandomScenarioSettings,
     SCENARIO_SETTINGS_PATH,
 )
 
@@ -46,6 +46,15 @@ from .config import (
 class Scenario:
     cars: list[Car]
     pedestrians: list[Pedestrian]
+    random_settings: ResolvedRandomScenarioSettings | None = None
+
+
+@dataclass(frozen=True)
+class ScenarioSettings:
+    """Validated persistent settings loaded as one coherent unit."""
+
+    definitions: dict[str, dict[str, list[dict[str, Any]]]]
+    random_scenario: RandomScenarioSettings
 
 
 def _finite_number(value: object, field: str) -> float:
@@ -147,55 +156,122 @@ def validate_scenario_definitions(
     return normalized
 
 
-def load_scenario_definitions(
+def validate_random_scenario_settings(
+    settings: RandomScenarioSettings | Mapping[str, object] | None,
+) -> RandomScenarioSettings:
+    if isinstance(settings, RandomScenarioSettings):
+        return settings
+    return RandomScenarioSettings.from_mapping(settings)
+
+
+def load_scenario_settings(
     path: Path = SCENARIO_SETTINGS_PATH,
-) -> dict[str, dict[str, list[dict[str, Any]]]]:
-    """Load the persistent catalog, falling back safely to built-in defaults."""
+) -> ScenarioSettings:
+    """Load scenario entities and random-generator settings from one file."""
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-        definitions = payload.get("scenarios") if isinstance(payload, dict) else None
-        return validate_scenario_definitions(definitions)
+        if not isinstance(payload, dict):
+            raise ValueError("scenario settings must be a JSON object")
     except (OSError, json.JSONDecodeError, ValueError) as error:
         application_logger.log_message(
             f"[SCENARIO SETTINGS] Using defaults: {error}"
         )
-        return validate_scenario_definitions(
+        return ScenarioSettings(
+            definitions=validate_scenario_definitions(
+                deepcopy(DEFAULT_SCENARIO_DEFINITIONS)
+            ),
+            random_scenario=DEFAULT_RANDOM_SCENARIO_SETTINGS,
+        )
+
+    try:
+        definitions = validate_scenario_definitions(payload.get("scenarios"))
+    except ValueError as error:
+        application_logger.log_message(
+            f"[SCENARIO SETTINGS] Invalid scenario catalog; using defaults: {error}"
+        )
+        definitions = validate_scenario_definitions(
             deepcopy(DEFAULT_SCENARIO_DEFINITIONS)
         )
 
+    try:
+        random_settings = validate_random_scenario_settings(
+            payload.get("random_scenario")
+        )
+    except ValueError as error:
+        application_logger.log_message(
+            "[SCENARIO SETTINGS] Invalid random scenario settings; "
+            f"using defaults: {error}"
+        )
+        random_settings = DEFAULT_RANDOM_SCENARIO_SETTINGS
+    return ScenarioSettings(definitions, random_settings)
 
-def save_scenario_definitions(
-    definitions: Mapping[str, Mapping[str, list[dict[str, Any]]]],
+
+def load_scenario_definitions(
     path: Path = SCENARIO_SETTINGS_PATH,
 ) -> dict[str, dict[str, list[dict[str, Any]]]]:
-    """Validate and atomically save the scenario catalog as JSON."""
+    """Compatibility helper returning only the persistent entity catalog."""
+    return load_scenario_settings(path).definitions
+
+
+def save_scenario_settings(
+    definitions: Mapping[str, Mapping[str, list[dict[str, Any]]]],
+    random_settings: RandomScenarioSettings | Mapping[str, object],
+    path: Path = SCENARIO_SETTINGS_PATH,
+) -> ScenarioSettings:
+    """Validate and atomically save all scenario settings."""
     normalized = validate_scenario_definitions(definitions)
-    payload = {"version": 2, "scenarios": normalized}
+    normalized_random = validate_random_scenario_settings(random_settings)
+    payload = {
+        "version": 3,
+        "random_scenario": normalized_random.to_dict(),
+        "scenarios": normalized,
+    }
     temporary_path = path.with_suffix(f"{path.suffix}.tmp")
     temporary_path.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
     temporary_path.replace(path)
-    return normalized
+    return ScenarioSettings(normalized, normalized_random)
+
+
+def save_scenario_definitions(
+    definitions: Mapping[str, Mapping[str, list[dict[str, Any]]]],
+    path: Path = SCENARIO_SETTINGS_PATH,
+) -> dict[str, dict[str, list[dict[str, Any]]]]:
+    """Compatibility helper preserving the current random settings."""
+    saved = save_scenario_settings(
+        definitions,
+        load_scenario_settings(path).random_scenario,
+        path,
+    )
+    return saved.definitions
 
 
 def generate_random_scenario_definition(
     world_width: float,
     *,
     rng: random.Random,
-    min_entities: int = RANDOM_SCENARIO_MIN_ENTITIES,
-    max_entities: int = RANDOM_SCENARIO_MAX_ENTITIES,
-    moved_probability: float = DEFAULT_MOVED_PROBABILITY,
+    settings: RandomScenarioSettings | Mapping[str, object] | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """Generate one seeded two-lane scenario as a serializable definition."""
-    minimum = max(1, int(min_entities))
-    maximum = max(minimum, int(max_entities))
-    probability = float(moved_probability)
-    if not 0.0 <= probability <= 1.0:
-        raise ValueError("moved_probability must be between 0 and 1")
+    normalized = validate_random_scenario_settings(settings)
+    return _generate_random_definition(
+        world_width,
+        rng=rng,
+        settings=normalized.resolve(rng),
+    )
 
-    entity_count = rng.randint(minimum, maximum)
+
+def _generate_random_definition(
+    world_width: float,
+    *,
+    rng: random.Random,
+    settings: ResolvedRandomScenarioSettings,
+) -> dict[str, list[dict[str, Any]]]:
+    """Generate entities from values already resolved for this seeded run."""
+    entity_count = rng.randint(settings.min_entities, settings.max_entities)
+    probability = settings.pedestrian_movement_probability
     first_x = RANDOM_SCENARIO_FIRST_ENTITY_X
     last_x = max(first_x + 40.0, float(world_width) - RANDOM_SCENARIO_END_MARGIN)
     slot_width = (last_x - first_x) / entity_count
@@ -246,7 +322,7 @@ def generate_random_scenario_definition(
             {
                 "x": DEFAULT_CAR_START_X,
                 "y_offset": -LANE_OFFSET,
-                "speed": DEFAULT_VEHICLE_SPEED_KMH,
+                "speed": settings.initial_speed,
             }
         ],
         "pedestrians": pedestrians,
@@ -260,17 +336,22 @@ def create_scenario(
     *,
     rng: random.Random | None = None,
     world_width: float = DEFAULT_WINDOW_WIDTH,
-    moved_probability: float = DEFAULT_MOVED_PROBABILITY,
+    random_settings: RandomScenarioSettings | Mapping[str, object] | None = None,
 ) -> Scenario:
     """Instantiate a fresh scenario from serializable definitions."""
     from simulation.entities import Car, Pedestrian
 
     scenario_rng = rng or random.Random()
+    resolved_random_settings = None
     if name == RANDOM_SCENARIO_NAME:
-        definition = generate_random_scenario_definition(
+        normalized_random_settings = validate_random_scenario_settings(
+            random_settings
+        )
+        resolved_random_settings = normalized_random_settings.resolve(scenario_rng)
+        definition = _generate_random_definition(
             world_width,
             rng=scenario_rng,
-            moved_probability=moved_probability,
+            settings=resolved_random_settings,
         )
     else:
         catalog = definitions or DEFAULT_SCENARIO_DEFINITIONS
@@ -298,4 +379,8 @@ def create_scenario(
         )
         for person in definition["pedestrians"]
     ]
-    return Scenario(cars=cars, pedestrians=pedestrians)
+    return Scenario(
+        cars=cars,
+        pedestrians=pedestrians,
+        random_settings=resolved_random_settings,
+    )

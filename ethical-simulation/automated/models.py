@@ -9,7 +9,10 @@ from typing import Any
 
 from decision_engine.modes import CODE_MODE, LLM_MODE
 from ethics.base import DecisionRecord
-from scenarios import DEFAULT_MOVED_PROBABILITY
+from scenarios import (
+    DEFAULT_RANDOM_SCENARIO_SETTINGS,
+    validate_random_scenario_settings,
+)
 
 from .config import (
     BATCH_MODES,
@@ -35,7 +38,9 @@ class BatchConfig:
     vision_distance: float
     decision_distance: float
     max_lane_changes: int
-    moved_probability: float = DEFAULT_MOVED_PROBABILITY
+    random_scenario_settings: dict[str, Any] = field(
+        default_factory=DEFAULT_RANDOM_SCENARIO_SETTINGS.to_dict
+    )
 
     def __post_init__(self) -> None:
         if self.mode not in BATCH_MODES:
@@ -49,8 +54,7 @@ class BatchConfig:
             raise ValueError(
                 f"LLM batches are limited to {MAX_LLM_BATCH_RUNS} runs"
             )
-        if not 0.0 <= self.moved_probability <= 1.0:
-            raise ValueError("Movement probability must be between 0 and 1")
+        validate_random_scenario_settings(self.random_scenario_settings)
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,613 @@
+\documentclass[10pt,a4paper]{article}
+
+% ------------------------------------------------
+% PACKAGES
+% ------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+
+\usepackage[
+    top=1.8cm,
+    bottom=1.8cm,
+    left=2cm,
+    right=2cm
+]{geometry}
+
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{microtype}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{titlesec}
+\usepackage{todonotes}
+
+% Compact spacing
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.35em}
+
+\setlist{
+    nosep,
+    leftmargin=1.4em
+}
+
+\titlespacing*{\section}
+    {0pt}{1.2em}{0.4em}
+
+\titlespacing*{\subsection}
+    {0pt}{0.8em}{0.3em}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue,
+    citecolor=blue
+}
+
+% ------------------------------------------------
+% TITLE
+% ------------------------------------------------
+
+\title{
+    \textbf{Ethical Decision-Making in Autonomous Driving}\\
+    \large Comparing Rule-Based and LLM-Based Ethical Agents
+}
+
+\author{
+    Your Name\\
+    University of Bologna\\
+    Master in Artificial Intelligence\\
+    \texttt{your.email@studio.unibo.it}
+}
+
+\date{2026}
+
+% =================================================
+\begin{document}
+
+\maketitle
+
+% ------------------------------------------------
+% ABSTRACT
+% ------------------------------------------------
+
+\begin{abstract}
+This project investigates ethical decision-making in autonomous driving
+through an interactive simulation in which a vehicle must decide whether
+to remain in its current lane or change lane when facing unavoidable
+accidents.
+
+Different ethical frameworks, including Utilitarianism, Kantian ethics
+and Constant's approach, are implemented and compared.
+Each framework can operate through a deterministic rule-based
+implementation or through a Large Language Model (LLM) agent.
+
+The simulator records decisions, casualties and framework-specific
+metrics, allowing the behaviour and motivations of different ethical
+agents to be analysed and compared. In addition to its experimental
+purpose, the system is also designed as an educational tool, providing
+an interactive graphical interface that helps users explore ethical
+frameworks, observe their decision-making processes, and understand how
+different moral principles can lead to different outcomes in the same
+scenario.
+\end{abstract}
+
+
+% =================================================
+\section{Introduction}
+
+Autonomous systems are becoming increasingly present in areas such as transportation, healthcare, finance, public administration, and decision-support systems. As Artificial Intelligence is progressively integrated into contexts that directly affect people, its decisions can no longer be considered only from a technical perspective. Questions about responsibility, fairness, transparency, human values, and acceptable risk are becoming an essential part of AI design.
+
+This explains why AI ethics is receiving growing attention both in research and in real-world applications. Modern AI systems are capable of making or supporting decisions at a scale and speed that would be impossible for humans, but this also means that their behaviour may have significant consequences. A system can be technically correct while still producing outcomes that are considered unfair, harmful, or ethically controversial.
+
+Autonomous vehicles provide a particularly interesting environment for studying these problems. In some situations, every available action may produce undesirable consequences, forcing the system to choose between different forms of harm. Such decisions cannot always be reduced to a simple optimization problem, because different ethical theories may evaluate the same situation in very different ways.
+
+This project develops an interactive autonomous-driving simulation designed to explore and compare different approaches to ethical decision-making. The vehicle is placed in controlled scenarios in which it must decide whether to remain in its current lane or change lane according to the ethical framework currently selected.
+
+A further objective of the project is to investigate the difference between explicitly \textbf{programmed ethical behaviour} and \textbf{ethical reasoning} performed by a \textbf{Large Language Model}. Each framework can therefore be implemented both through deterministic code and through an LLM-based agent, allowing the same ethical principles to be evaluated using two different computational approaches.
+
+The project is not intended only as an experimental platform for collecting data about ethical decisions. A significant part of the system is designed around an interactive graphical interface that allows users to visually explore the behaviour of the different ethical frameworks. Parameters, ethical rules, scenarios, decisions, and their consequences can be inspected directly through the simulation. This makes the application suitable both as an \textbf{experimental tool}, for comparing different configurations and analysing their results, and as an \textbf{educational tool}, helping users understand how different ethical theories can lead to different decisions when applied to the same practical dilemma.
+
+
+% =================================================
+\section{Implementation Technologies}
+
+The system is implemented in Python 3.12.3 \cite{python3123} and is
+structured to keep the simulation logic, graphical interface, ethical
+frameworks, and LLM components as independent as possible.
+
+\subsection{Simulation and User Interface}
+
+The interactive environment is developed using the \texttt{Arcade}
+framework (\texttt{arcade >= 3.3, < 4}).
+
+Arcade is responsible for the real-time simulation loop, vehicle movement,
+collision handling, graphical rendering, and user interaction. Its GUI
+components are also used to build the configuration menus, framework
+settings, simulation reports, and other interactive elements of the
+application.
+
+\subsection{LLM Integration}
+
+LLM-based ethical agents are integrated through a dedicated abstraction
+layer rather than being directly coupled to a specific provider.
+
+The initial implementation uses Google's Gemini models. API keys and model
+access are managed through Google AI Studio \cite{googleaistudio}, while
+the interaction with Gemini from Python is implemented using the official
+Google GenAI SDK, distributed through the \texttt{google-genai} package
+\cite{googlegenai}.
+
+The LLM receives the same decision context available to the deterministic
+implementation and returns a structured action together with a textual
+motivation.
+
+
+% =================================================
+\section{The Simulation}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{img/Scenario.png}
+    \caption{Screenshot of Scenario 1 as displayed in the software interface.}
+    \label{fig:scenario1}
+\end{figure}
+
+\subsection{Environment}
+
+The environment consists of a two-lane road containing different
+entities such as pedestrians.
+
+The autonomous vehicle moves automatically along the road until it
+reaches the end of the scenario.
+
+The only actions available to the ethical agent are:
+
+\begin{itemize}
+    \item \texttt{STAY}: remain in the current lane;
+    \item \texttt{CHANGE\_LANE}: move to the adjacent lane.
+\end{itemize}
+
+The number of lane changes can be limited through the parameter
+\texttt{max\_spostamenti}.
+
+
+\subsection{Vehicle Perception}
+
+The vehicle does not have complete knowledge of the environment.
+
+It can only observe:
+
+\begin{itemize}
+    \item entities visible in the current lane;
+    \item entities visible in the adjacent lane.
+\end{itemize}
+
+Two parameters control the decision process:
+
+\begin{description}[leftmargin=3.5cm]
+    \item[\texttt{vision\_distance}] maximum perception distance;
+    \item[\texttt{decision\_distance}] distance at which an ethical
+    decision is triggered.
+\end{description}
+
+Therefore, the ethical framework receives only the information that
+would be available to the vehicle at decision time.
+
+
+\subsection{Decision Context}
+
+\todo {Update this section}
+
+Every ethical agent receives the same structured context:
+
+\begin{verbatim}
+DecisionContext(
+    position,
+    current_lane_entities,
+    other_lane_entities,
+    lane_changes_remaining
+)
+\end{verbatim}
+
+This separation ensures that the perception system and the ethical
+reasoning system remain independent.
+
+
+\subsection{Simulation Interface}
+
+The simulation interface, shown in Figure~\ref{fig:scenario1}, provides the user with the controls and visual elements required to configure, manage, and observe the simulation.
+
+\subsubsection{Menu}
+
+The menu provides access to the main application functions and configuration options.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\linewidth]{img/menu.png}
+    \caption{Application menu}
+    \label{fig:menu}
+\end{figure}
+
+\subsubsection{Simulation Configuration and Control Bar}
+
+The simulation configuration and control bar allows the user to configure the main environment parameters and manage the execution of the simulation. It includes controls for modifying the simulation settings and for starting, pausing, resetting, and controlling the simulation.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\linewidth]{img/barra.png}
+    \caption{Control bar}
+    \label{fig:control_bar}
+\end{figure}
+
+
+
+
+% =================================================
+\section{Ethical Frameworks}
+
+Three main ethical approaches are considered.
+
+% ------------------------------------------------
+\subsection{Utilitarianism}
+
+The Utilitarian agent evaluates the consequences of the available
+actions and selects the one associated with the lowest total ethical
+cost.
+
+Each category can be assigned a configurable malus:
+
+\begin{center}
+\begin{tabular}{lc}
+\toprule
+Category & Example Malus \\
+\midrule
+Child   & -30 \\
+Adult   & -20 \\
+Elderly & -10 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+For an action $a$, its cost can be expressed as:
+
+\begin{equation}
+C(a) = \sum_{i \in V(a)} w_i
+\end{equation}
+
+where $V(a)$ represents the victims associated with action $a$ and
+$w_i$ is their configured ethical weight.
+
+The action with the lowest cost is selected.
+
+In case of equality, the vehicle remains in its current lane.
+
+
+% ------------------------------------------------
+\subsection{Kantian Framework}
+
+The Kantian implementation is based on configurable moral rules.
+
+Examples include:
+
+\begin{itemize}
+    \item do not intentionally redirect harm;
+    \item do not use a person merely as a means;
+    \item ignore personal categories;
+    \item ignore numerical differences between lives.
+\end{itemize}
+
+Unlike Utilitarianism, the rules are organised according to a
+\textbf{priority hierarchy}.
+
+When multiple rules produce conflicting recommendations, the
+higher-priority rule determines the decision.
+
+
+% ------------------------------------------------
+\subsection{Constant Framework}
+
+Constant is modelled using moral rules without an internal priority
+hierarchy.
+
+Each enabled rule has the same importance.
+
+If the rules agree, their recommendation determines the action.
+If they produce conflicting recommendations, a
+\textbf{moral conflict} is detected.
+
+The current implementation resolves this conflict through a secondary
+Utilitarian evaluation.
+
+% ------------------------------------------------
+\subsection{Virtue Ethics}
+
+The Virtue Ethics framework is available exclusively when the system
+operates in \textbf{LLM mode}.
+
+Unlike the other frameworks, it is not based on predefined numerical
+weights or an explicit set of deterministic moral rules. Instead, the
+language model is instructed to reason as a virtuous moral agent and to
+select the action that best reflects virtuous character and practical
+wisdom.
+
+This approach is inspired by \textbf{Aristotelian} virtue ethics, according to
+which moral action is not determined solely by fixed rules or by the
+consequences of an action, but by the exercise of virtues and
+\textit{practical wisdom} (\textit{phronesis}) in the specific
+circumstances of a decision \cite{aristotle2009nicomachean}.
+
+In the simulation, the LLM therefore evaluates the scenario by
+considering qualities associated with a virtuous agent, such as
+prudence, justice, courage, and temperance. The model is asked to
+determine how a virtuous autonomous vehicle should behave in the given
+situation and to return the action that is most consistent with these
+principles.
+
+
+% =================================================
+\section{Rule-Based and LLM Agents}
+
+Each framework provides two implementations:
+
+\begin{itemize}
+    \item \textbf{Code}: deterministic algorithmic implementation;
+    \item \textbf{LLM-Agent}: decision generated by a Large Language Model.
+\end{itemize}
+
+For example:
+
+\begin{verbatim}
+Utilitarianism (code)
+Utilitarianism (llm-agent)
+
+Kant (code)
+Kant (llm-agent)
+
+Constant (code)
+Constant (llm-agent)
+\end{verbatim}
+
+
+\subsection{LLM Prompt}
+
+The LLM prompt is constructed from four components:
+
+\begin{equation}
+P =
+P_{\text{system}}
++
+P_{\text{framework}}
++
+P_{\text{user}}
++
+P_{\text{context}}
+\end{equation}
+
+The system and framework prompts are stored in configuration files and
+cannot be modified through the interface.
+
+The user can instead provide additional natural-language instructions
+through the framework settings.
+
+
+\subsection{Asynchronous Decisions}
+
+LLM requests must not block the Arcade rendering loop.
+
+When an LLM decision is required, the simulation transitions through:
+
+\begin{center}
+\texttt{DRIVING}
+$\rightarrow$
+\texttt{WAITING\_FOR\_LLM}
+$\rightarrow$
+\texttt{EXECUTING\_DECISION}
+$\rightarrow$
+\texttt{DRIVING}
+\end{center}
+
+The simulation time is paused while waiting for the response, while the
+graphical interface remains responsive.
+
+
+% =================================================
+\section{Decision History and Explainability}
+
+Every decision is stored together with its context and explanation.
+
+For example:
+
+\begin{verbatim}
+{
+    "decision_id": 3,
+    "position_x": 1250,
+    "action": "CHANGE_LANE",
+    "current_lane": "...",
+    "other_lane": "...",
+    "reason": "..."
+}
+\end{verbatim}
+
+For LLM agents, additional information can be recorded:
+
+\begin{itemize}
+    \item model used;
+    \item response latency;
+    \item whether a fallback was required.
+\end{itemize}
+
+This allows the final action to be analysed together with the reasoning
+that produced it.
+
+
+% =================================================
+\section{Experimental Evaluation}
+
+The same scenarios should be executed using different ethical
+frameworks and implementations.
+
+This allows comparisons such as:
+
+\begin{center}
+\textbf{Utilitarianism (code)}
+vs.
+\textbf{Utilitarianism (LLM-agent)}
+\end{center}
+
+as well as comparisons between different ethical theories.
+
+
+\subsection{Metrics}
+
+The main metrics considered are:
+
+\begin{itemize}
+    \item total casualties;
+    \item casualties by category;
+    \item number of lane changes;
+    \item number of ethical decisions;
+    \item framework-specific metrics;
+    \item LLM response latency.
+\end{itemize}
+
+
+\subsection{Simulation Report}
+
+At the end of each simulation, a report is generated containing:
+
+\begin{itemize}
+    \item casualties by category;
+    \item used and remaining lane changes;
+    \item framework-specific results;
+    \item complete decision history and explanations.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\linewidth]{images/report.png}
+    \caption{Example of the final simulation report.}
+    \label{fig:report}
+\end{figure}
+
+
+% =================================================
+\section{Results}
+
+% Replace this section with your experiments.
+
+The experiments will compare the behaviour of the different ethical
+frameworks under identical scenarios.
+
+Particular attention will be given to:
+
+\begin{itemize}
+    \item differences between ethical theories;
+    \item differences between code and LLM implementations;
+    \item consistency of LLM decisions;
+    \item differences in explanations;
+    \item computational latency introduced by LLM agents.
+\end{itemize}
+
+
+% =================================================
+\section{Final Remarks}
+
+The project provides a controlled environment for investigating how
+different ethical principles influence autonomous decisions.
+
+A particularly relevant aspect is the comparison between explicitly
+programmed ethical rules and LLM agents instructed to follow the same
+ethical framework.
+
+This makes it possible to study not only which decisions are made, but
+also how consistently different computational approaches represent the
+same ethical theory.
+
+
+% =================================================
+\section{Reproducibility}
+
+The source code is available at:
+
+\begin{center}
+\url{https://github.com/YOUR-USERNAME/YOUR-REPOSITORY}
+\end{center}
+
+To install the project:
+
+\begin{verbatim}
+git clone https://github.com/YOUR-USERNAME/YOUR-REPOSITORY
+cd YOUR-REPOSITORY
+pip install -r requirements.txt
+\end{verbatim}
+
+Run the application with:
+
+\begin{verbatim}
+python main.py
+\end{verbatim}
+
+
+% =================================================
+\begin{thebibliography}{9}
+
+\bibitem{kant}
+I. Kant,
+\textit{Groundwork of the Metaphysics of Morals},
+1785.
+
+\bibitem{constant}
+B. Constant,
+\textit{On a Supposed Right to Lie from Philanthropy},
+1797.
+
+\bibitem{utilitarianism}
+J. S. Mill,
+\textit{Utilitarianism},
+1863.
+
+\begin{thebibliography}{9}
+
+\bibitem{python3123}
+Python Software Foundation,
+\textit{Python 3.12.3},
+2024.
+\url{https://www.python.org/downloads/release/python-3123/}
+
+\bibitem{googleaistudio}
+Google,
+\textit{Google AI Studio},
+Google AI for Developers.
+\url{https://ai.google.dev/aistudio}
+
+\bibitem{googlegenai}
+Google,
+\textit{Google Gen AI SDK for Python},
+Google AI for Developers.
+\url{https://ai.google.dev/gemini-api/docs/libraries}
+
+\bibitem{aristotle2009nicomachean}
+Aristotle,
+\textit{Nicomachean Ethics},
+trans. D. Ross, Oxford University Press, 2009.
+
+\end{thebibliography}
+
+% Add the sources actually used in the final report.
+
+\end{thebibliography}
+
+
+% =================================================
+\appendix
+
+\section{Additional Implementation Details}
+
+Additional diagrams, pseudocode, configuration files or experimental
+results can be included here if necessary.
+
+\end{document}

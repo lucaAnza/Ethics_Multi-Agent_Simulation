@@ -19,9 +19,22 @@ from ethics.config import (
     LLM_FRAMEWORKS,
     UTILITARIANISM,
 )
-from simulation.config import DEFAULT_PEDESTRIAN_SPEED
+from scenarios import RANDOM_SETTING_VALUE, RandomScenarioSettings
+from scenarios.config import (
+    CRAZY_DRIVER_SPEED_KMH,
+    MAX_RANDOM_SCENARIO_ENTITIES,
+    RANDOM_MAX_SHIFTS_RANGE,
+    RANDOM_VISION_DISTANCE_RANGE,
+)
+from simulation.config import (
+    DEFAULT_MAX_LANE_CHANGES,
+    DEFAULT_PEDESTRIAN_SPEED,
+    DEFAULT_VISION_DISTANCE,
+    MAX_CONFIGURABLE_DECISION_DISTANCE,
+    MIN_CONFIGURABLE_DECISION_DISTANCE,
+)
 from simulation.entities import PEDESTRIAN_ACTION_LABELS, PEDESTRIAN_MODEL_LABELS
-from ui.theme import MUTED, TEXT
+from ui.theme import MUTED, TEXT, dropdown_styles
 
 MEDAL_COLORS = (
     (212, 175, 55),   # Gold
@@ -713,8 +726,7 @@ def build_automated_settings(
     framework: str,
     scenario: str,
     random_seed: str,
-    moved_probability: str,
-    show_random_options: bool,
+    random_scenario_selected: bool,
     mode_options: list[str],
     framework_options: list[str],
     scenario_options: list[str],
@@ -727,7 +739,6 @@ def build_automated_settings(
 ) -> tuple[
     arcade.gui.UIInputText,
     arcade.gui.UIInputText,
-    arcade.gui.UIInputText | None,
     arcade.gui.UILabel,
 ]:
     """Build the batch configuration form and return its editable fields."""
@@ -816,30 +827,20 @@ def build_automated_settings(
         )
     )
     form.add(seed_row)
-    moved_probability_input: arcade.gui.UIInputText | None = None
-    if show_random_options:
-        probability_row = arcade.gui.UIBoxLayout(
-            vertical=False,
-            space_between=12,
-        )
-        probability_row.add(
+    if random_scenario_selected:
+        form.add(
             arcade.gui.UILabel(
-                text="Movement probability (0–1)",
-                width=215,
+                text=(
+                    "Random generator values are managed in Menu > "
+                    "Scenario Settings > Random Scenario."
+                ),
+                width=590,
                 height=34,
-                font_size=11,
-                text_color=MUTED,
+                font_size=9,
+                text_color=(251, 191, 36),
+                align="center",
             )
         )
-        moved_probability_input = probability_row.add(
-            arcade.gui.UIInputText(
-                text=moved_probability,
-                width=390,
-                height=34,
-                font_size=12,
-            )
-        )
-        form.add(probability_row)
     form.with_background(color=(25, 34, 45, 245))
     form.with_border(width=1, color=(61, 76, 94))
     form.with_padding(all=12)
@@ -879,7 +880,7 @@ def build_automated_settings(
     actions.add(_button("Start Batch", on_start, 210, variant="save"))
     content.add(actions)
     _add_centered(manager, content)
-    return count_input, seed_input, moved_probability_input, status
+    return count_input, seed_input, status
 
 
 def build_automated_progress(
@@ -908,32 +909,15 @@ def build_batch_report_navigation(
     manager.add(anchor)
 
 
-def build_scenario_settings(
-    manager: arcade.gui.UIManager,
+def _build_scenario_navigation(
     *,
     scenario_names: list[str],
     selected_scenario: str,
-    scenario_definition: dict[str, list[dict]],
-    selected_entity: tuple[str, int],
-    road_y: float,
-    message: str,
+    card_height: int,
     on_select_scenario: Callable[[str], None],
-    on_select_entity: Callable[[str, int], None],
-    on_add_car: Callable,
-    on_add_pedestrian: Callable,
-    on_set_location: Callable,
-    on_delete_entity: Callable,
-    on_save: Callable,
     on_back: Callable,
-) -> tuple[
-    dict[str, arcade.gui.UIInputText],
-    arcade.gui.UIDropdown | None,
-    arcade.gui.UIDropdown | None,
-    arcade.gui.UISlider | None,
-    arcade.gui.UILabel,
-]:
-    """Build the persistent scenario and entity editor."""
-    card_height = 490
+) -> arcade.gui.UIBoxLayout:
+    """Build the shared scenario list used by both editor variants."""
     scenario_column = arcade.gui.UIBoxLayout(
         vertical=True,
         space_between=7,
@@ -965,6 +949,42 @@ def build_scenario_settings(
     )
     scenario_column.add(_button("Back to Menu", on_back, 190, variant="back"))
     scenario_column.add(arcade.gui.UIWidget(width=190, height=10))
+    return scenario_column
+
+
+def build_scenario_settings(
+    manager: arcade.gui.UIManager,
+    *,
+    scenario_names: list[str],
+    selected_scenario: str,
+    scenario_definition: dict[str, list[dict]],
+    selected_entity: tuple[str, int],
+    road_y: float,
+    message: str,
+    on_select_scenario: Callable[[str], None],
+    on_select_entity: Callable[[str, int], None],
+    on_add_car: Callable,
+    on_add_pedestrian: Callable,
+    on_set_location: Callable,
+    on_delete_entity: Callable,
+    on_save: Callable,
+    on_back: Callable,
+) -> tuple[
+    dict[str, arcade.gui.UIInputText],
+    arcade.gui.UIDropdown | None,
+    arcade.gui.UIDropdown | None,
+    arcade.gui.UISlider | None,
+    arcade.gui.UILabel,
+]:
+    """Build the persistent scenario and entity editor."""
+    card_height = 490
+    scenario_column = _build_scenario_navigation(
+        scenario_names=scenario_names,
+        selected_scenario=selected_scenario,
+        card_height=card_height,
+        on_select_scenario=on_select_scenario,
+        on_back=on_back,
+    )
 
     cars = scenario_definition["cars"]
     pedestrians = scenario_definition["pedestrians"]
@@ -1364,6 +1384,308 @@ def build_scenario_settings(
         pedestrian_speed_slider,
         status,
     )
+
+
+def build_random_scenario_settings(
+    manager: arcade.gui.UIManager,
+    *,
+    scenario_names: list[str],
+    selected_scenario: str,
+    settings: RandomScenarioSettings,
+    message: str,
+    on_select_scenario: Callable[[str], None],
+    on_save: Callable,
+    on_back: Callable,
+) -> tuple[
+    dict[str, arcade.gui.UIInputText],
+    dict[str, arcade.gui.UIDropdown],
+    arcade.gui.UILabel,
+]:
+    """Build settings for the persisted Random Scenario generator."""
+    card_height = 590
+    scenario_column = _build_scenario_navigation(
+        scenario_names=scenario_names,
+        selected_scenario=selected_scenario,
+        card_height=card_height,
+        on_select_scenario=on_select_scenario,
+        on_back=on_back,
+    )
+    inputs: dict[str, arcade.gui.UIInputText] = {}
+    dropdowns: dict[str, arcade.gui.UIDropdown] = {}
+
+    def add_input(
+        column: arcade.gui.UIBoxLayout,
+        label: str,
+        key: str,
+        value: int | float,
+    ) -> arcade.gui.UIInputText:
+        row = arcade.gui.UIBoxLayout(
+            vertical=False,
+            space_between=8,
+            width=312,
+            height=36,
+            size_hint_min=(312, 36),
+            size_hint_max=(312, 36),
+        )
+        label_holder, _label = _fixed_label(
+            label,
+            width=180,
+            height=36,
+            font_size=9,
+            text_color=MUTED,
+            anchor_x="right",
+        )
+        row.add(label_holder)
+        widget = row.add(
+            arcade.gui.UIInputText(
+                text=f"{value:g}",
+                width=124,
+                height=34,
+                size_hint_min=(124, 34),
+                size_hint_max=(124, 34),
+                font_size=11,
+                text_color=TEXT,
+            )
+        )
+        inputs[key] = widget
+        column.add(row)
+        return widget
+
+    def add_mode(
+        column: arcade.gui.UIBoxLayout,
+        label: str,
+        key: str,
+        is_random: bool,
+        value_input: arcade.gui.UIInputText,
+    ) -> None:
+        row = arcade.gui.UIBoxLayout(
+            vertical=False,
+            space_between=8,
+            width=312,
+            height=36,
+            size_hint_min=(312, 36),
+            size_hint_max=(312, 36),
+        )
+        label_holder, _label = _fixed_label(
+            label,
+            width=180,
+            height=36,
+            font_size=9,
+            text_color=MUTED,
+            anchor_x="right",
+        )
+        row.add(label_holder)
+        selected_mode = "Random" if is_random else "Fixed"
+        dropdown = row.add(
+            arcade.gui.UIDropdown(
+                default=selected_mode,
+                options=["Fixed", "Random"],
+                width=124,
+                height=34,
+                size_hint_min=(124, 34),
+                size_hint_max=(124, 34),
+                **dropdown_styles(),
+            )
+        )
+        dropdowns[key] = dropdown
+
+        def mode_changed(event: arcade.gui.UIOnChangeEvent) -> None:
+            value_input.disabled = event.new_value == "Random"
+
+        dropdown.on_change = mode_changed
+        value_input.disabled = is_random
+        column.add(row)
+
+    generator_column = arcade.gui.UIBoxLayout(
+        vertical=True,
+        space_between=8,
+        width=320,
+        height=350,
+    )
+    generator_column.add(
+        _section_heading("GENERATOR", "ENTITIES AND VEHICLE", 312)
+    )
+    add_input(
+        generator_column,
+        "Minimum entities",
+        "min_entities",
+        settings.min_entities,
+    )
+    add_input(
+        generator_column,
+        "Maximum entities",
+        "max_entities",
+        settings.max_entities,
+    )
+    add_input(
+        generator_column,
+        "Initial speed (km/h)",
+        "initial_speed",
+        settings.initial_speed,
+    )
+    add_input(
+        generator_column,
+        "Crazy driver probability",
+        "crazy_driver_probability",
+        settings.crazy_driver_probability,
+    )
+    generator_column.add(
+        arcade.gui.UILabel(
+            text=(
+                f"A crazy driver starts at {CRAZY_DRIVER_SPEED_KMH:g} km/h. "
+                "Probabilities use values from 0 to 1. "
+                f"Entity limits: 1–{MAX_RANDOM_SCENARIO_ENTITIES}."
+            ),
+            width=312,
+            height=42,
+            font_size=8,
+            text_color=MUTED,
+            multiline=True,
+        )
+    )
+
+    behavior_column = arcade.gui.UIBoxLayout(
+        vertical=True,
+        space_between=8,
+        width=320,
+        height=350,
+    )
+    behavior_column.add(
+        _section_heading("BEHAVIOR", "PERCEPTION AND MOVEMENT", 312)
+    )
+    vision_value = add_input(
+        behavior_column,
+        "Vision distance (px)",
+        "vision_distance",
+        settings.vision_distance or DEFAULT_VISION_DISTANCE,
+    )
+    add_mode(
+        behavior_column,
+        "Vision mode",
+        "vision_mode",
+        settings.vision_distance is None,
+        vision_value,
+    )
+    add_input(
+        behavior_column,
+        "Decision distance (px)",
+        "decision_distance",
+        settings.decision_distance,
+    )
+    max_shifts_value = add_input(
+        behavior_column,
+        "Maximum lane shifts",
+        "max_shifts",
+        (
+            settings.max_shifts
+            if settings.max_shifts is not None
+            else DEFAULT_MAX_LANE_CHANGES
+        ),
+    )
+    add_mode(
+        behavior_column,
+        "Max shifts mode",
+        "max_shifts_mode",
+        settings.max_shifts is None,
+        max_shifts_value,
+    )
+    add_input(
+        behavior_column,
+        "Pedestrian move probability",
+        "pedestrian_movement_probability",
+        settings.pedestrian_movement_probability,
+    )
+    behavior_column.add(
+        arcade.gui.UILabel(
+            text=(
+                f"Random vision: {RANDOM_VISION_DISTANCE_RANGE[0]:g}–"
+                f"{RANDOM_VISION_DISTANCE_RANGE[1]:g} px  ·  Random shifts: "
+                f"{RANDOM_MAX_SHIFTS_RANGE[0]}–{RANDOM_MAX_SHIFTS_RANGE[1]}\n"
+                f"Decision: {MIN_CONFIGURABLE_DECISION_DISTANCE:g}–"
+                f"{MAX_CONFIGURABLE_DECISION_DISTANCE:g} px, capped by vision."
+            ),
+            width=312,
+            height=38,
+            font_size=8,
+            text_color=MUTED,
+            multiline=True,
+        )
+    )
+
+    settings_columns = arcade.gui.UIBoxLayout(
+        vertical=False,
+        align="top",
+        space_between=18,
+        width=658,
+        height=350,
+    )
+    settings_columns.add(generator_column)
+    settings_columns.add(behavior_column)
+
+    editor = arcade.gui.UIBoxLayout(
+        vertical=True,
+        space_between=10,
+        width=674,
+        height=card_height,
+    )
+    editor.add(arcade.gui.UIWidget(width=658, height=10))
+    editor.add(_section_heading("RANDOM SCENARIO", "GENERATOR SETTINGS", 658))
+    editor.add(settings_columns)
+    editor.add(
+        arcade.gui.UILabel(
+            text=(
+                "These values are shared by interactive and automated runs. "
+                f"Use {RANDOM_SETTING_VALUE.upper()} for supported randomized fields."
+            ),
+            width=658,
+            height=24,
+            font_size=8,
+            text_color=MUTED,
+            align="center",
+        )
+    )
+    editor.add(_button("Save Scenario Settings", on_save, 300, variant="save"))
+    status = editor.add(
+        arcade.gui.UILabel(
+            text=message,
+            width=658,
+            height=30,
+            font_size=9,
+            text_color=MUTED,
+            multiline=True,
+            align="center",
+        )
+    )
+    editor.add(arcade.gui.UIWidget(width=658, height=8))
+
+    body = arcade.gui.UIBoxLayout(vertical=False, space_between=10)
+    body.add(
+        _section_card(
+            scenario_column,
+            width=206,
+            height=card_height,
+            accent=(37, 99, 235),
+        )
+    )
+    body.add(
+        _section_card(
+            editor,
+            width=674,
+            height=card_height,
+            accent=(251, 146, 60),
+        )
+    )
+    content = arcade.gui.UIBoxLayout(vertical=True, space_between=12)
+    content.add(
+        _heading(
+            "SCENARIO SETTINGS",
+            "CONFIGURE FIXED SCENARIOS AND THE RANDOM GENERATOR",
+            890,
+        )
+    )
+    content.add(body)
+    _add_centered(manager, content)
+    return inputs, dropdowns, status
 
 
 def build_location_picker(

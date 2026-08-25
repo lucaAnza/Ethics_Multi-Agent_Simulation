@@ -64,11 +64,13 @@ three modes: deterministic code only, LLM Agent only, and paired deterministic
 vs LLM execution. Paired runs reuse the same scenario snapshot, vehicle
 parameters, entity positions, and random seed for both implementations.
 
-Selecting **Random Scenario** generates between 2 and 10 pedestrians ahead of
-the vehicle. Models are drawn from a shuffled cycle so every model is used
-before the cycle repeats; positions are always placed on one of the two lane
-centers. `Movement probability` defaults to `0.10` and controls whether each
-pedestrian receives one of the existing movement actions. A supplied random
+Selecting **Random Scenario** generates pedestrians ahead of the vehicle on
+the two lane centers. Its Scenario Settings page controls the entity range,
+initial speed, vision and decision distances, maximum lane shifts, crazy-driver
+probability, and pedestrian-movement probability. Vision and lane shifts can
+be fixed or resolved randomly. Models are drawn from a shuffled cycle so every
+model is used before the cycle repeats. These settings are saved in
+`scenarios/scenario_settings.json`, shared with automated runs, and a supplied
 seed reproduces the complete generated scenario.
 
 The Arcade window remains responsive while a batch runs in the background and
@@ -130,7 +132,7 @@ All three frameworks keep their decision reasons in memory for the current run.
 Kant and Constant rule switches, Kant priority controls, and the Constant
 resolver are applied immediately to the simulation state.
 
-**Scenario Settings** provides an editor for cars and pedestrians, including
-map-based placement and pedestrian movement. Saved scenarios are validated and
+**Scenario Settings** provides an editor for fixed cars and pedestrians plus a
+dedicated Random Scenario generator form. Saved settings are validated and
 loaded from `scenarios/scenario_settings.json` at startup. General Settings
 remains a placeholder.

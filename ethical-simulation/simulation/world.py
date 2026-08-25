@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
     import arcade
+    from scenarios import RandomScenarioSettings
 
 arcade = None
 
@@ -22,7 +23,7 @@ def _require_arcade():
         arcade = arcade_module
     return arcade
 
-from scenarios import DEFAULT_MOVED_PROBABILITY, DEFAULT_SCENARIO_NAME, create_scenario
+from scenarios import DEFAULT_SCENARIO_NAME, create_scenario
 from simulation.config import (
     CAR_HALF_LENGTH as _CAR_HALF_LENGTH,
     CAR_HALF_WIDTH as _CAR_HALF_WIDTH,
@@ -70,7 +71,9 @@ class World:
         ] | None = None,
         *,
         random_seed: int | None = None,
-        moved_probability: float = DEFAULT_MOVED_PROBABILITY,
+        random_scenario_settings: (
+            RandomScenarioSettings | Mapping[str, object] | None
+        ) = None,
         rendering_enabled: bool = True,
     ) -> None:
         self.width = width
@@ -78,7 +81,7 @@ class World:
         self.scenario_name = scenario
         self.scenario_definitions = scenario_definitions
         self.random_seed = random_seed
-        self.moved_probability = moved_probability
+        self.random_scenario_settings = random_scenario_settings
         self.rendering_enabled = rendering_enabled
         self.cars: list[Car] = []
         self.pedestrians: list[Pedestrian] = []
@@ -324,10 +327,14 @@ class World:
             self.scenario_definitions,
             rng=random.Random(self.random_seed),
             world_width=self.width,
-            moved_probability=self.moved_probability,
+            random_settings=self.random_scenario_settings,
         )
         self.cars = initial.cars
         self.pedestrians = initial.pedestrians
+        if initial.random_settings is not None:
+            self.vision_distance = initial.random_settings.vision_distance
+            self.decision_distance = initial.random_settings.decision_distance
+            self.max_spostamenti = initial.random_settings.max_shifts
         for car in self.cars:
             car.lane_index = 1 if car.y >= self.road_y else 0
             car.y = self.lane_centers[car.lane_index]
@@ -341,6 +348,12 @@ class World:
         definitions: Mapping[str, Mapping[str, list[dict[str, Any]]]],
     ) -> None:
         self.scenario_definitions = definitions
+
+    def set_random_scenario_settings(
+        self,
+        settings: RandomScenarioSettings | Mapping[str, object],
+    ) -> None:
+        self.random_scenario_settings = settings
 
     def resize(self, width: int, height: int) -> None:
         old_road_y = self.road_y
