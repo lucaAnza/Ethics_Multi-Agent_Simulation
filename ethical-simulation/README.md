@@ -64,6 +64,13 @@ three modes: deterministic code only, LLM Agent only, and paired deterministic
 vs LLM execution. Paired runs reuse the same scenario snapshot, vehicle
 parameters, entity positions, and random seed for both implementations.
 
+Selecting **Random Scenario** generates between 2 and 10 pedestrians ahead of
+the vehicle. Models are drawn from a shuffled cycle so every model is used
+before the cycle repeats; positions are always placed on one of the two lane
+centers. `Movement probability` defaults to `0.10` and controls whether each
+pedestrian receives one of the existing movement actions. A supplied random
+seed reproduces the complete generated scenario.
+
 The Arcade window remains responsive while a batch runs in the background and
 can cancel it at any time. Movement, perception, collisions, decision triggers,
 framework calls, and statistics all pass through the same `SimulationEngine`

@@ -39,7 +39,12 @@ from ethics.rules import DEFAULT_RULE_ENABLED, DEFAULT_RULE_ORDER, MORAL_RULES
 from ethics.utilitarian import UtilitarianFramework
 from ethics.virtue import VirtueEthicsFramework
 from llm import GeminiClient, PromptBuilder
-from scenarios import load_scenario_definitions, save_scenario_definitions
+from scenarios import (
+    DEFAULT_MOVED_PROBABILITY,
+    RANDOM_SCENARIO_NAME,
+    load_scenario_definitions,
+    save_scenario_definitions,
+)
 from simulation import SimulationDecisionEvent, SimulationEngine, World
 from simulation.entities import Pedestrian
 from simulation.statistics import casualty_category_counts
@@ -121,12 +126,12 @@ class SimulationWindow(arcade.Window):
             "Ethical Multi-Agent Simulation",
             resizable=True,
         )
-        self.set_minimum_size(1150, 500)
+        self.set_minimum_size(1185, 500)
         self.current_framework = "Utilitarianism"
         self.current_implementation = CODE_MODE
         self.framework_editor_mode = CODE_MODE
         self.scenario_definitions = load_scenario_definitions()
-        self.scenario_names = list(self.scenario_definitions)
+        self.scenario_names = [*self.scenario_definitions, RANDOM_SCENARIO_NAME]
         self.current_scenario = (
             "Scenario 1"
             if "Scenario 1" in self.scenario_definitions
@@ -212,6 +217,7 @@ class SimulationWindow(arcade.Window):
             name: float(definition["cars"][0]["speed"])
             for name, definition in self.scenario_definitions.items()
         }
+        self.scenario_initial_speeds[RANDOM_SCENARIO_NAME] = 50.0
         self.scenario_editor_draft = deepcopy(self.scenario_definitions)
         self.scenario_editor_scenario = self.current_scenario
         self.scenario_editor_entity = ("cars", 0)
@@ -250,8 +256,12 @@ class SimulationWindow(arcade.Window):
             COMPARISON: "20",
         }
         self.automated_seed = ""
+        self.automated_moved_probability = f"{DEFAULT_MOVED_PROBABILITY:.2f}"
         self.automated_count_input: arcade.gui.UIInputText | None = None
         self.automated_seed_input: arcade.gui.UIInputText | None = None
+        self.automated_moved_probability_input: (
+            arcade.gui.UIInputText | None
+        ) = None
         self.automated_status_label: arcade.gui.UILabel | None = None
         self.automated_cancel_button: arcade.gui.UIFlatButton | None = None
         self.last_batch_config: BatchConfig | None = None
@@ -293,7 +303,7 @@ class SimulationWindow(arcade.Window):
             holder.add(label, anchor_x="left", anchor_y="center")
             return holder, label
 
-        row = arcade.gui.UIBoxLayout(vertical=False, space_between=5)
+        row = arcade.gui.UIBoxLayout(vertical=False, space_between=4)
 
         selection_controls = arcade.gui.UIBoxLayout(vertical=False, space_between=4)
         framework = selection_controls.add(
@@ -311,24 +321,24 @@ class SimulationWindow(arcade.Window):
             arcade.gui.UIDropdown(
                 default=self.current_scenario,
                 options=self.scenario_names,
-                width=92,
+                width=132,
                 height=34,
             )
         )
         automated_button = selection_controls.add(
             arcade.gui.UIFlatButton(
                 text="Automated Simulation",
-                width=145,
+                width=175,
                 height=34,
             )
         )
         automated_button.on_click = self._open_automated_settings
-        row.add(section("FRAMEWORK / SIMULATION", selection_controls, 405))
+        row.add(section("FRAMEWORK / SIMULATION", selection_controls, 475))
         row.add(separator())
 
         playback_controls = arcade.gui.UIBoxLayout(vertical=False, space_between=5)
         time_holder, self.time_scale_label = fixed_label(
-            f"Time x{self.time_scale:.2f}", 58
+            f"Time x{self.time_scale:.2f}", 52
         )
         playback_controls.add(time_holder)
         time_slider = playback_controls.add(
@@ -337,26 +347,33 @@ class SimulationWindow(arcade.Window):
                 min_value=0.25,
                 max_value=2.0,
                 step=0.25,
-                width=44,
+                width=38,
                 height=26,
             )
+        )
+        reset_label = (
+            "Regenerate"
+            if self.current_scenario == RANDOM_SCENARIO_NAME
+            else "Reset"
         )
         for label, handler, width in (
             (">", self._play, 34),
             ("||", self._pause, 34),
-            ("Reset", self._stop, 48),
+            (reset_label, self._stop, 78),
         ):
             button = playback_controls.add(
                 arcade.gui.UIFlatButton(text=label, width=width, height=34)
             )
             button.on_click = handler
-        row.add(section("TIME / CONTROLS", playback_controls, 226))
+            if handler == self._stop:
+                self.reset_button = button
+        row.add(section("TIME / CONTROLS", playback_controls, 256))
         row.add(separator())
 
         vehicle_controls = arcade.gui.UIBoxLayout(vertical=False, space_between=4)
         initial_kmh = self.scenario_initial_speeds[self.current_scenario]
         initial_holder, self.initial_speed_label = fixed_label(
-            f"Speed {initial_kmh:02.0f}", 48, font_size=8
+            f"Speed {initial_kmh:02.0f}", 44, font_size=8
         )
         vehicle_controls.add(initial_holder)
         self.initial_speed_slider = vehicle_controls.add(
@@ -365,13 +382,13 @@ class SimulationWindow(arcade.Window):
                 min_value=0,
                 max_value=200,
                 step=1,
-                width=38,
+                width=34,
                 height=26,
             )
         )
         vision_holder, self.vision_distance_label = fixed_label(
             f"Vision {self.vision_distance:.0f}",
-            55,
+            50,
             font_size=8,
         )
         vehicle_controls.add(vision_holder)
@@ -381,13 +398,13 @@ class SimulationWindow(arcade.Window):
                 min_value=150,
                 max_value=500,
                 step=10,
-                width=40,
+                width=34,
                 height=26,
             )
         )
         decision_holder, self.decision_distance_label = fixed_label(
             f"Decision {self.decision_distance:.0f}",
-            62,
+            58,
             font_size=8,
         )
         vehicle_controls.add(decision_holder)
@@ -397,13 +414,13 @@ class SimulationWindow(arcade.Window):
                 min_value=30,
                 max_value=250,
                 step=10,
-                width=40,
+                width=34,
                 height=26,
             )
         )
         shifts_holder, self.max_spostamenti_label = fixed_label(
             f"Max shifts {self.max_spostamenti}",
-            52,
+            48,
             font_size=8,
         )
         vehicle_controls.add(shifts_holder)
@@ -413,19 +430,19 @@ class SimulationWindow(arcade.Window):
                 min_value=0,
                 max_value=10,
                 step=1,
-                width=36,
+                width=32,
                 height=26,
             )
         )
-        row.add(section("VEHICLE VARIABLES", vehicle_controls, 399))
+        row.add(section("VEHICLE VARIABLES", vehicle_controls, 362))
         row.add(separator())
 
         app_controls = arcade.gui.UIBoxLayout(vertical=False, space_between=5)
         menu_button = app_controls.add(
-            arcade.gui.UIFlatButton(text="Menu", width=75, height=34)
+            arcade.gui.UIFlatButton(text="Menu", width=65, height=34)
         )
         menu_button.on_click = self._open_menu
-        row.add(section("APPLICATION", app_controls, 75))
+        row.add(section("APPLICATION", app_controls, 65))
 
         framework.on_change = self._framework_changed
         scenario.on_change = self._scenario_changed
@@ -492,6 +509,12 @@ class SimulationWindow(arcade.Window):
             self.world.cars[0].speed = speed
             self.initial_speed_slider.value = speed
             self.initial_speed_label.text = f"Speed {speed:02.0f}"
+            self.reset_button.text = (
+                "Regenerate"
+                if self.current_scenario == RANDOM_SCENARIO_NAME
+                else "Reset"
+            )
+            self.reset_button.trigger_render()
             self._reset_run_state()
 
     def _time_scale_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
@@ -945,7 +968,11 @@ class SimulationWindow(arcade.Window):
         self, _event: arcade.gui.UIOnClickEvent | None = None
     ) -> None:
         self.scenario_editor_draft = deepcopy(self.scenario_definitions)
-        self.scenario_editor_scenario = self.current_scenario
+        self.scenario_editor_scenario = (
+            self.current_scenario
+            if self.current_scenario in self.scenario_editor_draft
+            else next(iter(self.scenario_editor_draft))
+        )
         self.scenario_editor_entity = ("cars", 0)
         self.scenario_editor_message = ""
         self._show_scenario_editor()
@@ -1187,11 +1214,12 @@ class SimulationWindow(arcade.Window):
 
         self.scenario_definitions = saved_definitions
         self.scenario_editor_draft = deepcopy(saved_definitions)
-        self.scenario_names = list(saved_definitions)
+        self.scenario_names = [*saved_definitions, RANDOM_SCENARIO_NAME]
         self.scenario_initial_speeds = {
             name: float(definition["cars"][0]["speed"])
             for name, definition in saved_definitions.items()
         }
+        self.scenario_initial_speeds[RANDOM_SCENARIO_NAME] = 50.0
         self.world.set_scenario_definitions(saved_definitions)
         self.world.reset(self.current_scenario)
         self.world.configure_vehicle(
@@ -1243,6 +1271,10 @@ class SimulationWindow(arcade.Window):
             )
         if self.automated_seed_input is not None:
             self.automated_seed = self.automated_seed_input.text.strip()
+        if self.automated_moved_probability_input is not None:
+            self.automated_moved_probability = (
+                self.automated_moved_probability_input.text.strip()
+            )
 
     def _open_automated_settings(
         self,
@@ -1262,6 +1294,7 @@ class SimulationWindow(arcade.Window):
         (
             self.automated_count_input,
             self.automated_seed_input,
+            self.automated_moved_probability_input,
             self.automated_status_label,
         ) = build_automated_settings(
             self.manager,
@@ -1270,6 +1303,10 @@ class SimulationWindow(arcade.Window):
             framework=self._automated_framework_display(),
             scenario=self.automated_scenario,
             random_seed=self.automated_seed,
+            moved_probability=self.automated_moved_probability,
+            show_random_options=(
+                self.automated_scenario == RANDOM_SCENARIO_NAME
+            ),
             mode_options=[ONLY_DETERMINISTIC, ONLY_LLM, COMPARISON],
             framework_options=self._automated_framework_options(),
             scenario_options=self.scenario_names,
@@ -1309,7 +1346,9 @@ class SimulationWindow(arcade.Window):
         event: arcade.gui.UIOnChangeEvent,
     ) -> None:
         if event.new_value is not None and event.new_value in self.scenario_names:
+            self._remember_automated_fields()
             self.automated_scenario = str(event.new_value)
+            self._open_automated_settings()
 
     def _set_automated_error(self, message: str) -> None:
         if self.automated_status_label is not None:
@@ -1328,6 +1367,14 @@ class SimulationWindow(arcade.Window):
             seed = int(self.automated_seed) if self.automated_seed else None
         except ValueError as error:
             raise ValueError("Random seed must be an integer or left empty") from error
+        moved_probability = DEFAULT_MOVED_PROBABILITY
+        if self.automated_scenario == RANDOM_SCENARIO_NAME:
+            try:
+                moved_probability = float(self.automated_moved_probability)
+            except ValueError as error:
+                raise ValueError("Movement probability must be numeric") from error
+            if not 0.0 <= moved_probability <= 1.0:
+                raise ValueError("Movement probability must be between 0 and 1")
 
         return BatchConfig(
             mode=self.automated_mode,
@@ -1335,6 +1382,7 @@ class SimulationWindow(arcade.Window):
             framework_name=self.automated_framework,
             scenario_name=self.automated_scenario,
             random_seed=seed,
+            moved_probability=moved_probability,
             scenario_definitions=deepcopy(self.scenario_definitions),
             framework_settings=self._llm_framework_settings(
                 self.automated_framework

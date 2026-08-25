@@ -51,6 +51,8 @@ moved_probability that is setted to 0.1 at the beggining that can add a move tha
 
 2. Set in the simulation automated possibility to activate random max_shift and set an interval of the possible value. Same for the other decision_distance,...
 
+3. Unibo university in the background
+
 
 SCENARIO:
 

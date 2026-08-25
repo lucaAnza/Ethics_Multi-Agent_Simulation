@@ -222,6 +222,7 @@ class AutomatedSimulationRunner:
             config.scenario_name,
             config.scenario_definitions,
             random_seed=seed,
+            moved_probability=config.moved_probability,
             rendering_enabled=False,
         )
         world.configure_vehicle(

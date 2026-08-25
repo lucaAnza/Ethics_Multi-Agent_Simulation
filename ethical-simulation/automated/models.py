@@ -32,6 +32,7 @@ class BatchConfig:
     vision_distance: float
     decision_distance: float
     max_lane_changes: int
+    moved_probability: float = 0.1
 
     def __post_init__(self) -> None:
         if self.mode not in BATCH_MODES:
@@ -40,6 +41,8 @@ class BatchConfig:
             raise ValueError("Number of simulations must be at least 1")
         if self.mode != ONLY_DETERMINISTIC and self.number_of_runs > 1000:
             raise ValueError("LLM batches are limited to 1000 runs")
+        if not 0.0 <= self.moved_probability <= 1.0:
+            raise ValueError("Movement probability must be between 0 and 1")
 
 
 @dataclass(frozen=True)

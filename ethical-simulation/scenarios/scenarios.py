@@ -12,29 +12,22 @@ import random
 from typing import TYPE_CHECKING, Any
 
 from app_logging import application_logger
+from simulation.entities import (
+    MOVING_PEDESTRIAN_ACTIONS,
+    PEDESTRIAN_ACTIONS,
+    PEDESTRIAN_MODEL_CYCLE,
+    PEDESTRIAN_MODELS,
+)
 
 if TYPE_CHECKING:
     from simulation.entities import Car, Pedestrian
 
 
 SCENARIO_SETTINGS_PATH = Path(__file__).with_name("scenario_settings.json")
-PEDESTRIAN_MODELS = {
-    "man",
-    "woman",
-    "old_man",
-    "old_woman",
-    "boy",
-    "girl",
-    "custom",
-}
-PEDESTRIAN_ACTIONS = {
-    "still",
-    "move_right",
-    "move_left",
-    "move_down",
-    "move_up",
-    "random_move",
-}
+RANDOM_SCENARIO_NAME = "Random Scenario"
+DEFAULT_MOVED_PROBABILITY = 0.1
+RANDOM_SCENARIO_MIN_ENTITIES = 2
+RANDOM_SCENARIO_MAX_ENTITIES = 10
 
 DEFAULT_SCENARIO_DEFINITIONS: dict[str, dict[str, list[dict[str, Any]]]] = {
     "Scenario 1": {
@@ -63,7 +56,6 @@ DEFAULT_SCENARIO_DEFINITIONS: dict[str, dict[str, list[dict[str, Any]]]] = {
             {"x": 625.0, "y_offset": 46.0, "model": "old_woman", "label": None},
             {"x": 700.0, "y_offset": 46.0, "model": "boy", "label": None},
             {"x": 775.0, "y_offset": 46.0, "model": "girl", "label": None},
-            {"x": 760.0, "y_offset": -25.0, "model": "custom", "label": "Alex"},
         ],
     },
 }
@@ -97,6 +89,8 @@ def validate_scenario_definitions(
             raise ValueError("scenario names must be non-empty strings")
         if raw_name.strip() == "Scenario Free":
             continue
+        if raw_name.strip() == RANDOM_SCENARIO_NAME:
+            raise ValueError(f"{RANDOM_SCENARIO_NAME} is a reserved scenario name")
         if not isinstance(raw_scenario, Mapping):
             raise ValueError(f"{raw_name} must be an object")
 
@@ -199,20 +193,90 @@ def save_scenario_definitions(
     return normalized
 
 
+def generate_random_scenario_definition(
+    world_width: float,
+    *,
+    rng: random.Random,
+    min_entities: int = RANDOM_SCENARIO_MIN_ENTITIES,
+    max_entities: int = RANDOM_SCENARIO_MAX_ENTITIES,
+    moved_probability: float = DEFAULT_MOVED_PROBABILITY,
+) -> dict[str, list[dict[str, Any]]]:
+    """Generate one seeded two-lane scenario as a serializable definition."""
+    minimum = max(1, int(min_entities))
+    maximum = max(minimum, int(max_entities))
+    probability = float(moved_probability)
+    if not 0.0 <= probability <= 1.0:
+        raise ValueError("moved_probability must be between 0 and 1")
+
+    entity_count = rng.randint(minimum, maximum)
+    first_x = 320.0
+    last_x = max(first_x + 40.0, float(world_width) - 190.0)
+    slot_width = (last_x - first_x) / entity_count
+    positions = [
+        first_x
+        + slot_width * (index + 0.5)
+        + rng.uniform(-slot_width * 0.28, slot_width * 0.28)
+        for index in range(entity_count)
+    ]
+    positions.sort()
+
+    models: list[str] = []
+    while len(models) < entity_count:
+        cycle = list(PEDESTRIAN_MODEL_CYCLE)
+        rng.shuffle(cycle)
+        if models and cycle[0] == models[-1]:
+            swap_index = next(
+                index for index, model in enumerate(cycle[1:], start=1)
+                if model != models[-1]
+            )
+            cycle[0], cycle[swap_index] = cycle[swap_index], cycle[0]
+        models.extend(cycle)
+
+    pedestrians: list[dict[str, Any]] = []
+    for index, (x, model) in enumerate(zip(positions, models)):
+        moves = rng.random() < probability
+        action = rng.choice(MOVING_PEDESTRIAN_ACTIONS) if moves else "still"
+        pedestrians.append(
+            {
+                "x": round(x, 2),
+                "y_offset": rng.choice((-45.0, 45.0)),
+                "model": model,
+                "label": f"Custom {index + 1}" if model == "custom" else None,
+                "action": action,
+                "speed": round(rng.uniform(35.0, 65.0), 2) if moves else 55.0,
+            }
+        )
+
+    return {
+        "cars": [{"x": 130.0, "y_offset": -45.0, "speed": 50.0}],
+        "pedestrians": pedestrians,
+    }
+
+
 def create_scenario(
     name: str,
     road_y: float,
     definitions: Mapping[str, Mapping[str, list[dict[str, Any]]]] | None = None,
     *,
     rng: random.Random | None = None,
+    world_width: float = 1200.0,
+    moved_probability: float = DEFAULT_MOVED_PROBABILITY,
 ) -> Scenario:
     """Instantiate a fresh scenario from serializable definitions."""
     from simulation.entities import Car, Pedestrian
 
-    catalog = definitions or DEFAULT_SCENARIO_DEFINITIONS
-    if name not in catalog:
-        raise ValueError(f"Unknown scenario: {name}")
-    definition = catalog[name]
+    scenario_rng = rng or random.Random()
+    if name == RANDOM_SCENARIO_NAME:
+        definition = generate_random_scenario_definition(
+            world_width,
+            rng=scenario_rng,
+            moved_probability=moved_probability,
+        )
+    else:
+        catalog = definitions or DEFAULT_SCENARIO_DEFINITIONS
+        if name not in catalog:
+            raise ValueError(f"Unknown scenario: {name}")
+        definition = catalog[name]
     cars = [
         Car(
             x=float(car["x"]),
@@ -222,7 +286,6 @@ def create_scenario(
         )
         for car in definition["cars"]
     ]
-    scenario_rng = rng or random.Random()
     pedestrians = [
         Pedestrian(
             x=float(person["x"]),

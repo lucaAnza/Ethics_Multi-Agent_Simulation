@@ -22,7 +22,7 @@ def _require_arcade():
         arcade = arcade_module
     return arcade
 
-from scenarios import create_scenario
+from scenarios import DEFAULT_MOVED_PROBABILITY, create_scenario
 from simulation.entities import Car, Pedestrian
 
 
@@ -55,6 +55,7 @@ class World:
         ] | None = None,
         *,
         random_seed: int | None = None,
+        moved_probability: float = DEFAULT_MOVED_PROBABILITY,
         rendering_enabled: bool = True,
     ) -> None:
         self.width = width
@@ -62,6 +63,7 @@ class World:
         self.scenario_name = scenario
         self.scenario_definitions = scenario_definitions
         self.random_seed = random_seed
+        self.moved_probability = moved_probability
         self.rendering_enabled = rendering_enabled
         self.cars: list[Car] = []
         self.pedestrians: list[Pedestrian] = []
@@ -303,6 +305,8 @@ class World:
             self.road_y,
             self.scenario_definitions,
             rng=random.Random(self.random_seed),
+            world_width=self.width,
+            moved_probability=self.moved_probability,
         )
         self.cars = initial.cars
         self.pedestrians = initial.pedestrians

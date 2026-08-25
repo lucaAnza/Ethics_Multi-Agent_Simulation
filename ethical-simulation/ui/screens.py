@@ -729,6 +729,8 @@ def build_automated_settings(
     framework: str,
     scenario: str,
     random_seed: str,
+    moved_probability: str,
+    show_random_options: bool,
     mode_options: list[str],
     framework_options: list[str],
     scenario_options: list[str],
@@ -741,6 +743,7 @@ def build_automated_settings(
 ) -> tuple[
     arcade.gui.UIInputText,
     arcade.gui.UIInputText,
+    arcade.gui.UIInputText | None,
     arcade.gui.UILabel,
 ]:
     """Build the batch configuration form and return its editable fields."""
@@ -753,7 +756,7 @@ def build_automated_settings(
         )
     )
 
-    form = arcade.gui.UIBoxLayout(vertical=True, space_between=10, width=620)
+    form = arcade.gui.UIBoxLayout(vertical=True, space_between=8, width=620)
 
     def dropdown_row(
         label: str,
@@ -766,7 +769,7 @@ def build_automated_settings(
             arcade.gui.UILabel(
                 text=label,
                 width=215,
-                height=38,
+                height=34,
                 font_size=11,
                 text_color=MUTED,
             )
@@ -776,7 +779,7 @@ def build_automated_settings(
                 default=selected,
                 options=options,
                 width=390,
-                height=38,
+                height=34,
             )
         )
         dropdown.on_change = callback
@@ -793,7 +796,7 @@ def build_automated_settings(
                 else "Number of simulations"
             ),
             width=215,
-            height=38,
+            height=34,
             font_size=11,
             text_color=MUTED,
         )
@@ -802,7 +805,7 @@ def build_automated_settings(
         arcade.gui.UIInputText(
             text=number_of_runs,
             width=390,
-            height=38,
+            height=34,
             font_size=12,
         )
     )
@@ -815,7 +818,7 @@ def build_automated_settings(
         arcade.gui.UILabel(
             text="Random seed (optional)",
             width=215,
-            height=38,
+            height=34,
             font_size=11,
             text_color=MUTED,
         )
@@ -824,14 +827,38 @@ def build_automated_settings(
         arcade.gui.UIInputText(
             text=random_seed,
             width=390,
-            height=38,
+            height=34,
             font_size=12,
         )
     )
     form.add(seed_row)
+    moved_probability_input: arcade.gui.UIInputText | None = None
+    if show_random_options:
+        probability_row = arcade.gui.UIBoxLayout(
+            vertical=False,
+            space_between=12,
+        )
+        probability_row.add(
+            arcade.gui.UILabel(
+                text="Movement probability (0–1)",
+                width=215,
+                height=34,
+                font_size=11,
+                text_color=MUTED,
+            )
+        )
+        moved_probability_input = probability_row.add(
+            arcade.gui.UIInputText(
+                text=moved_probability,
+                width=390,
+                height=34,
+                font_size=12,
+            )
+        )
+        form.add(probability_row)
     form.with_background(color=(25, 34, 45, 245))
     form.with_border(width=1, color=(61, 76, 94))
-    form.with_padding(all=18)
+    form.with_padding(all=12)
     content.add(form)
 
     if mode == "Only Deterministic":
@@ -868,7 +895,7 @@ def build_automated_settings(
     actions.add(_button("Start Batch", on_start, 210, variant="save"))
     content.add(actions)
     _add_centered(manager, content)
-    return count_input, seed_input, status
+    return count_input, seed_input, moved_probability_input, status
 
 
 def build_automated_progress(

@@ -3,7 +3,8 @@
 import math
 import random
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, cast, get_args
+
 from .units import vehicle_kmh_to_pixels_per_second
 
 
@@ -17,6 +18,16 @@ PedestrianModel = Literal[
     "custom",
 ]
 
+# Runtime validation and random generation derive from the same typed source.
+_PEDESTRIAN_MODEL_VALUES = cast(
+    tuple[PedestrianModel, ...],
+    get_args(PedestrianModel),
+)
+PEDESTRIAN_MODELS = frozenset(_PEDESTRIAN_MODEL_VALUES)
+PEDESTRIAN_MODEL_CYCLE = tuple(
+    model for model in _PEDESTRIAN_MODEL_VALUES if model != "custom"
+)
+
 PedestrianAction = Literal[
     "still",
     "move_right",
@@ -25,6 +36,13 @@ PedestrianAction = Literal[
     "move_up",
     "random_move",
 ]
+
+PEDESTRIAN_ACTIONS = frozenset(
+    cast(tuple[PedestrianAction, ...], get_args(PedestrianAction))
+)
+MOVING_PEDESTRIAN_ACTIONS = tuple(
+    sorted(action for action in PEDESTRIAN_ACTIONS if action != "still")
+)
 
 
 @dataclass
