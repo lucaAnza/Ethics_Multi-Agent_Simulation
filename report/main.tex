@@ -243,16 +243,45 @@ The simulation configuration and control bar allows the user to configure the ma
     \label{fig:control_bar}
 \end{figure}
 
+\subsubsection{Simulation report}
+
+At the end of each simulation, the system generates a report summarizing
+the main outcomes of the selected ethical framework.
+
+The report includes aggregated information such as the total number of
+casualties, casualties divided by category, the number of lane changes
+used, and framework-specific metrics.
+
+It also includes a detailed decision history. For each decision, the
+report shows the vehicle position, the situation observed in the current
+and adjacent lanes, the selected action, and the motivation produced by
+the ethical framework.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{img/report.png}
+    \caption{Report section}
+    \label{fig:report}
+\end{figure}
+
 
 
 
 % =================================================
+\newpage
 \section{Ethical Frameworks}
 
-Three main ethical approaches are considered.
+Four main ethical approaches are considered.
 
 % ------------------------------------------------
 \subsection{Utilitarianism}
+
+Utilitarianism is a consequentialist ethical theory according to which
+the morality of an action depends primarily on its consequences.
+The morally preferable action is the one that maximizes overall
+well-being, taking into account the interests of all individuals affected.
+Individual intentions are therefore secondary to the final outcome, and
+moral decision-making can be interpreted as an optimisation problem.
 
 The Utilitarian agent evaluates the consequences of the available
 actions and selects the one associated with the lowest total ethical
@@ -289,6 +318,14 @@ In case of equality, the vehicle remains in its current lane.
 % ------------------------------------------------
 \subsection{Kantian Framework}
 
+Kantian ethics belongs to the deontological tradition and evaluates
+actions according to moral duties rather than their consequences.
+A central principle is universalizability: an action is morally acceptable
+only if the maxim underlying it could be consistently adopted as a
+universal rule. Moreover, individuals must be respected as ends in
+themselves and should never be treated merely as instruments for
+achieving another objective.
+
 The Kantian implementation is based on configurable moral rules.
 
 Examples include:
@@ -310,6 +347,13 @@ higher-priority rule determines the decision.
 % ------------------------------------------------
 \subsection{Constant Framework}
 
+Benjamin Constant criticised the rigidity of Kantian deontology,
+particularly the idea that moral duties must hold without exception.
+According to Constant, the application of a moral rule can depend on
+the specific context in which an action takes place. Duties such as
+truth-telling may therefore be defeasible when following them would
+directly produce serious harm or injustice.
+
 Constant is modelled using moral rules without an internal priority
 hierarchy.
 
@@ -319,8 +363,18 @@ If the rules agree, their recommendation determines the action.
 If they produce conflicting recommendations, a
 \textbf{moral conflict} is detected.
 
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\linewidth]{img/conflict_solver.png}
+    \caption{Constant framework pipeline}
+    \label{fig:conflict_solver}
+\end{figure}
+
 The current implementation resolves this conflict through a secondary
-Utilitarian evaluation.
+Utilitarian evaluation. However, the conflict-resolution strategy is
+configurable and can be adapted or replaced with different approaches,
+allowing alternative ethical criteria to be introduced without modifying
+the overall framework structure.
 
 % ------------------------------------------------
 \subsection{Virtue Ethics}
@@ -349,6 +403,7 @@ principles.
 
 
 % =================================================
+\newpage
 \section{Rule-Based and LLM Agents}
 
 Each framework provides two implementations:
@@ -432,7 +487,7 @@ For example:
 }
 \end{verbatim}
 
-For LLM agents, additional information can be recorded:
+For LLM agents, additional information are recorded:
 
 \begin{itemize}
     \item model used;
@@ -445,77 +500,265 @@ that produced it.
 
 
 % =================================================
+\newpage
 \section{Experimental Evaluation}
 
-The same scenarios should be executed using different ethical
-frameworks and implementations.
+The experimental evaluation is designed to analyse both the internal
+consistency of each ethical framework and the differences that emerge
+when different ethical theories are applied to the same scenarios.
 
-This allows comparisons such as:
+To ensure a fair comparison, paired experiments use the same scenarios,
+initial conditions and random seeds whenever possible. 
 
-\begin{center}
-\textbf{Utilitarianism (code)}
-vs.
-\textbf{Utilitarianism (LLM-agent)}
-\end{center}
+% ------------------------------------------------
+\subsection{Internal Consistency: Code vs LLM}
 
-as well as comparisons between different ethical theories.
+The first group of experiments investigates whether the deterministic
+implementation and the LLM-based implementation of the same ethical
+framework behave consistently.
+
+\subsubsection{Utilitarianism}
+
+The following experiments are performed:
+
+\begin{enumerate}
+
+    \item \textbf{Strongly protected category -- random scenarios}
+
+    A very high ethical malus is assigned to one specific category,
+    for example children, while lower values are assigned to the other
+    categories.
+
+    The experiment evaluates whether both implementations consistently
+    protect the strongly weighted category.
+
+    \textit{Research question:}
+    Does the LLM correctly reproduce the strong preference encoded by
+    the Utilitarian weights?
 
 
-\subsection{Metrics}
+    \item \textbf{Equal weights -- random scenarios}
 
-The main metrics considered are:
+    All categories are assigned the same ethical weight.
+
+    In this configuration, the Utilitarian decision should mainly depend
+    on the total number of casualties rather than on their category.
+
+    \textit{Research question:}
+    Do the deterministic and LLM implementations converge towards similar
+    decisions when all human lives have the same configured weight?
+
+
+    \item \textbf{Different weight configurations -- random scenarios}
+
+    Multiple configurations of category weights are tested using the same
+    random scenarios for both implementations.
+
+    \textit{Research question:}
+    Does the LLM adapt consistently when the ethical priorities defined
+    by the weights are changed?
+
+
+    \item \textbf{Scenario where everyone can be saved}
+
+    A controlled scenario is created in which a sequence of valid
+    decisions allows the vehicle to complete the simulation without any
+    casualties.
+
+    \textit{Research question:}
+    Are both implementations able to identify and follow the
+    zero-casualty solution?
+
+\end{enumerate}
+
+
+\subsubsection{Kantian Ethics}
+
+The following experiments are performed:
+
+\begin{enumerate}
+
+    \item \textbf{Random rule configurations}
+
+    Different combinations of enabled rules and priority orders are
+    generated and tested on identical scenarios.
+
+    \textit{Research question:}
+    Does the LLM reproduce the decisions of the deterministic Kantian
+    implementation and correctly respect the configured rule hierarchy?
+
+
+    \item \textbf{Scenario where everyone can be saved}
+
+    A controlled scenario is used in which it is possible to avoid all
+    casualties without violating the available actions.
+
+    \textit{Research question:}
+    Do both Kantian implementations identify the non-harmful solution
+    when no real moral trade-off is necessary?
+
+\end{enumerate}
+
+
+\subsubsection{Constant's Approach}
+
+The following experiments are performed:
+
+\begin{enumerate}
+
+    \item \textbf{Random rule configurations}
+
+    Different sets of active rules are generated and tested using the
+    same scenarios for both implementations.
+
+    \textit{Research question:}
+    How similar are the deterministic and LLM implementations when
+    Constant's rules are configured in the same way?
+
+
+    \item \textbf{Scenario where everyone can be saved}
+
+    A controlled scenario is created in which all casualties can be
+    avoided.
+
+    \textit{Research question:}
+    Do both implementations successfully identify the solution that
+    avoids unnecessary harm?
+
+\end{enumerate}
+
+
+% ------------------------------------------------
+\subsection{Framework Comparison}
+
+The second group of experiments compares different ethical theories
+directly.
+
+All frameworks are evaluated using the same scenarios and random seeds,
+so that the comparison focuses on differences generated by their ethical
+decision strategies.
+
+
+\subsubsection{Kant vs Constant -- Deterministic Implementations}
+
+The deterministic implementations of Kant and Constant are executed on
+the same set of scenarios.
+
+The main difference between the two approaches lies in \textbf{conflict
+resolution}: Kant uses a hierarchy of moral rules, while Constant allows
+rules to remain at the same level and uses an additional conflict
+resolution strategy when necessary.
+
+The main research question is:
+
+\begin{quote}
+\textit{Does the greater flexibility of Constant's conflict-resolution
+mechanism lead to fewer casualties than the hierarchical Kantian
+approach?}
+\end{quote}
+
+\subsubsection{Comparison Between All Frameworks}
+
+Utilitarianism, Kantian Ethics, Constant's approach and Virtue Ethics are
+executed on the same scenarios using identical random seeds.
+
+The objective is not to identify an objectively ``correct'' ethical
+theory, but to compare the practical consequences produced by each
+framework.
+
+The main research question is:
+
+\begin{quote}
+\textit{How do different ethical frameworks compare when evaluated
+according to common quantitative outcome metrics?}
+\end{quote}
+
+% ------------------------------------------------
+\subsection{Evaluation Metrics}
+
+The following metrics can be collected for each simulation and aggregated
+across multiple runs.
+
+\subsubsection{General Simulation Metrics}
 
 \begin{itemize}
-    \item total casualties;
-    \item casualties by category;
-    \item number of lane changes;
-    \item number of ethical decisions;
-    \item framework-specific metrics;
-    \item LLM response latency.
+
+    \item \textbf{Total casualties}: total number of entities killed
+    during the simulation.
+
+    \item \textbf{Average casualties per simulation}: mean number of
+    casualties across all runs.
+
+    \item \textbf{Casualties by general category}: number of casualties for each
+    entity category (adult,...)
+
+    \item \textbf{Casualties by specific category}: percentage of encountered
+    entities belonging to a category that are killed.
+
+    \item \textbf{Zero-casualty rate}: percentage of simulations completed
+    without casualties.
+
+    \item \textbf{Lane changes used}: number of lane changes performed
+    during a simulation.
+
+    \item \textbf{Average lane changes}: mean number of lane changes across
+    all simulations.
+
+    \item \textbf{STAY / CHANGE\_LANE ratio}: distribution of the two
+    possible actions selected by the agent.
+
+    \item \textbf{Number of ethical decisions}: total number of decisions
+    triggered during the simulation.
+
+    \item \textbf{Framework-specific metrics}: additional values generated
+    by the selected ethical framework, such as total Utilitarian malus,
+    number of rule conflicts, or rules responsible for Kantian decisions.
+
 \end{itemize}
 
 
-\subsection{Simulation Report}
+\subsubsection{Code vs LLM Metrics}
 
-At the end of each simulation, a report is generated containing:
+For experiments comparing deterministic and LLM-based implementations,
+additional metrics are considered:
 
 \begin{itemize}
-    \item casualties by category;
-    \item used and remaining lane changes;
-    \item framework-specific results;
-    \item complete decision history and explanations.
+
+    \item \textbf{Decision agreement rate}: percentage of decision points
+    in which Code and LLM select the same action.
+
+    \item \textbf{Simulation outcome agreement}: percentage of paired
+    simulations that end with the same total number of casualties.
+
+    \item \textbf{Casualty difference}: difference in total casualties
+    between Code and LLM for the same scenario.
+
+    \item \textbf{Category-specific agreement}: similarity between the
+    casualty distributions produced by the two implementations.
+
+    \item \textbf{LLM response latency}: time required by the LLM to
+    produce each decision.
+
 \end{itemize}
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.75\linewidth]{images/report.png}
-    \caption{Example of the final simulation report.}
-    \label{fig:report}
-\end{figure}
+These metrics allow the experiments to evaluate not only the final
+number of casualties, but also the consistency of the decision process,
+the behaviour of LLM agents, and the practical differences between the
+ethical frameworks.
+
+
 
 
 % =================================================
+\newpage
 \section{Results}
-
-% Replace this section with your experiments.
-
-The experiments will compare the behaviour of the different ethical
-frameworks under identical scenarios.
-
-Particular attention will be given to:
-
-\begin{itemize}
-    \item differences between ethical theories;
-    \item differences between code and LLM implementations;
-    \item consistency of LLM decisions;
-    \item differences in explanations;
-    \item computational latency introduced by LLM agents.
-\end{itemize}
+\todo{to finish}
 
 
 % =================================================
 \section{Final Remarks}
 
+\todo{to finish}
 The project provides a controlled environment for investigating how
 different ethical principles influence autonomous decisions.
 
@@ -528,31 +771,9 @@ also how consistently different computational approaches represent the
 same ethical theory.
 
 
-% =================================================
-\section{Reproducibility}
-
-The source code is available at:
-
-\begin{center}
-\url{https://github.com/YOUR-USERNAME/YOUR-REPOSITORY}
-\end{center}
-
-To install the project:
-
-\begin{verbatim}
-git clone https://github.com/YOUR-USERNAME/YOUR-REPOSITORY
-cd YOUR-REPOSITORY
-pip install -r requirements.txt
-\end{verbatim}
-
-Run the application with:
-
-\begin{verbatim}
-python main.py
-\end{verbatim}
-
 
 % =================================================
+\newpage
 \begin{thebibliography}{9}
 
 \bibitem{kant}
@@ -607,7 +828,7 @@ trans. D. Ross, Oxford University Press, 2009.
 
 \section{Additional Implementation Details}
 
-Additional diagrams, pseudocode, configuration files or experimental
-results can be included here if necessary.
+\todo{Additional diagrams, pseudocode, configuration files or experimental
+results can be included here if necessary}
 
 \end{document}
