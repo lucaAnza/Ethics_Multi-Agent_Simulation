@@ -87,7 +87,7 @@ from simulation.entities import (
     PEDESTRIAN_MODEL_LABELS,
     Pedestrian,
 )
-from simulation.statistics import casualty_category_counts
+from simulation.statistics import casualty_category_counts, casualty_entity_counts
 from ui.batch_report import BatchReportRenderer
 from ui.report import SimulationReportData, SimulationReportRenderer
 from ui.screens import (
@@ -751,6 +751,7 @@ class SimulationWindow(arcade.Window):
             lane_changes_used=self.world.lane_changes_used,
             max_lane_changes=self.world.max_spostamenti,
             casualty_counts=self._casualty_category_counts(dead),
+            casualty_entity_counts=casualty_entity_counts(dead),
             decision_history=history,
             framework_metrics=metrics,
         )
@@ -1009,13 +1010,17 @@ class SimulationWindow(arcade.Window):
         self.framework_status_label.text = "Values saved in simulation state."
 
     def _open_scenario_settings(
-        self, _event: arcade.gui.UIOnClickEvent | None = None
+        self,
+        _event: arcade.gui.UIOnClickEvent | None = None,
+        *,
+        selected_scenario: str | None = None,
     ) -> None:
         self.scenario_editor_draft = deepcopy(self.scenario_definitions)
         self.random_scenario_settings_draft = self.random_scenario_settings
+        requested_scenario = selected_scenario or self.current_scenario
         self.scenario_editor_scenario = (
-            self.current_scenario
-            if self.current_scenario
+            requested_scenario
+            if requested_scenario
             in (*self.scenario_editor_draft, RANDOM_SCENARIO_NAME)
             else next(iter(self.scenario_editor_draft))
         )
@@ -1404,8 +1409,20 @@ class SimulationWindow(arcade.Window):
             on_mode_change=self._automated_mode_changed,
             on_framework_change=self._automated_framework_changed,
             on_scenario_change=self._automated_scenario_changed,
+            on_random_scenario_settings=self._open_automated_random_settings,
             on_start=self._start_automated_batch,
             on_back=self._return_to_simulation,
+        )
+
+    def _open_automated_random_settings(
+        self,
+        event: arcade.gui.UIOnClickEvent | None = None,
+    ) -> None:
+        """Open the shared Random Scenario editor from the batch setup."""
+        self._remember_automated_fields()
+        self._open_scenario_settings(
+            event,
+            selected_scenario=RANDOM_SCENARIO_NAME,
         )
 
     def _automated_mode_changed(self, event: arcade.gui.UIOnChangeEvent) -> None:
@@ -1993,8 +2010,6 @@ class SimulationWindow(arcade.Window):
             f"Adult: {category_counts['Adult']}",
             f"Elderly: {category_counts['Elderly']}",
         ]
-        if category_counts.get("Custom", 0):
-            summary_lines.append(f"Custom: {category_counts['Custom']}")
         summary_lines.append(f"Framework: {self.current_framework}")
         summary_lines.append(
             "Implementation: "
@@ -2053,7 +2068,6 @@ class SimulationWindow(arcade.Window):
             "old_woman": "Senior (F)",
             "boy": "Child (M)",
             "girl": "Child (F)",
-            "custom": "Custom",
         }
         counts: dict[str, int] = {}
         for pedestrian in casualties:

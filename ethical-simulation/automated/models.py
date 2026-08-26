@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from itertools import zip_longest
 from typing import Any
@@ -20,6 +21,20 @@ from .config import (
     MAX_LLM_BATCH_RUNS,
     ONLY_DETERMINISTIC,
 )
+
+
+def _average_counts(
+    distributions: Iterable[Mapping[str, int]],
+    denominator: int,
+) -> dict[str, float]:
+    totals: defaultdict[str, int] = defaultdict(int)
+    for distribution in distributions:
+        for key, count in distribution.items():
+            totals[key] += count
+    return {
+        key: total / denominator
+        for key, total in totals.items()
+    }
 
 
 @dataclass(frozen=True)
@@ -70,6 +85,7 @@ class BatchSimulationResult:
     number_of_decisions: int
     decision_history: list[DecisionRecord]
     framework_specific_metrics: dict[str, str]
+    deaths_by_entity: dict[str, int] = field(default_factory=dict)
     model: str | None = None
     average_latency_ms: float | None = None
     total_llm_calls: int = 0
@@ -110,6 +126,7 @@ class BatchReport:
     error: str | None = None
     average_deaths: float = field(init=False)
     average_deaths_by_category: dict[str, float] = field(init=False)
+    average_deaths_by_entity: dict[str, float] = field(init=False)
     lane_change_distribution: dict[int, int] = field(init=False)
     average_decisions: float = field(init=False)
     average_llm_latency_ms: float | None = field(init=False)
@@ -130,17 +147,21 @@ class BatchReport:
             sum(result.total_deaths for result in self.results) / denominator,
         )
 
-        category_totals: defaultdict[str, int] = defaultdict(int)
-        for result in self.results:
-            for category, count in result.deaths_by_category.items():
-                category_totals[category] += count
         object.__setattr__(
             self,
             "average_deaths_by_category",
-            {
-                category: total / denominator
-                for category, total in sorted(category_totals.items())
-            },
+            _average_counts(
+                (result.deaths_by_category for result in self.results),
+                denominator,
+            ),
+        )
+        object.__setattr__(
+            self,
+            "average_deaths_by_entity",
+            _average_counts(
+                (result.deaths_by_entity for result in self.results),
+                denominator,
+            ),
         )
         object.__setattr__(
             self,
@@ -221,6 +242,7 @@ class BatchReport:
             if (
                 code.total_deaths != llm.total_deaths
                 or code.deaths_by_category != llm.deaths_by_category
+                or code.deaths_by_entity != llm.deaths_by_entity
             ):
                 different_results += 1
         if complete_pairs == 0:

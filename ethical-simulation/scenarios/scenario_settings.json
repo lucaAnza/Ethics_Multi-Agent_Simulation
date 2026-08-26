@@ -98,7 +98,7 @@
         {
           "x": 760.0,
           "y_offset": -25.0,
-          "model": "custom",
+          "model": "man",
           "label": "Alex",
           "action": "still",
           "speed": 55.0

@@ -300,7 +300,7 @@ def _generate_random_definition(
         models.extend(cycle)
 
     pedestrians: list[dict[str, Any]] = []
-    for index, (x, model) in enumerate(zip(positions, models)):
+    for x, model in zip(positions, models):
         moves = rng.random() < probability
         action = rng.choice(MOVING_PEDESTRIAN_ACTIONS) if moves else "still"
         pedestrians.append(
@@ -308,7 +308,7 @@ def _generate_random_definition(
                 "x": round(x, 2),
                 "y_offset": rng.choice((-LANE_OFFSET, LANE_OFFSET)),
                 "model": model,
-                "label": f"Custom {index + 1}" if model == "custom" else None,
+                "label": None,
                 "action": action,
                 "speed": (
                     round(rng.uniform(*RANDOM_PEDESTRIAN_SPEED_RANGE), 2)

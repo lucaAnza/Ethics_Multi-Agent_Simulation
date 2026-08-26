@@ -55,6 +55,7 @@ class SharedConfigurationTests(unittest.TestCase):
     def test_entity_metadata_covers_the_typed_runtime_catalogs(self) -> None:
         self.assertEqual(PEDESTRIAN_MODELS, PEDESTRIAN_MODEL_LABELS.keys())
         self.assertEqual(PEDESTRIAN_MODELS, PEDESTRIAN_CATEGORY_BY_MODEL.keys())
+        self.assertEqual(PEDESTRIAN_MODELS, DEFAULT_ENTITIES_VALUES.keys())
         self.assertEqual(PEDESTRIAN_ACTIONS, PEDESTRIAN_ACTION_LABELS.keys())
 
     def test_framework_catalog_and_prompts_use_the_same_modes(self) -> None:

@@ -19,7 +19,10 @@ from decision_engine import (
 from ethics.factory import EthicalFrameworkFactory
 from scenarios import RANDOM_SCENARIO_NAME
 from simulation.engine import SimulationEngine
-from simulation.statistics import casualty_category_counts
+from simulation.statistics import (
+    casualty_category_counts,
+    casualty_entity_counts,
+)
 from simulation.world import World
 
 from .config import (
@@ -355,6 +358,7 @@ class AutomatedSimulationRunner:
             seed=seed,
             total_deaths=len(dead),
             deaths_by_category=casualty_category_counts(dead),
+            deaths_by_entity=casualty_entity_counts(dead),
             lane_changes_used=world.lane_changes_used,
             max_lane_changes=world.max_spostamenti,
             number_of_decisions=len(history),

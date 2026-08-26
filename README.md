@@ -45,13 +45,10 @@ By combining a generated simulation environment with LLM-based agents, the proje
 
 # IDEAS
 
-1. Define a random scenario that generate himself. He randomly generated number of entities. type of entities (something like a cicle where each time take a different entities). Location that should be in a range
-of x,y such that they are always in one of the two street line. In addition there is a variable called
-moved_probability that is setted to 0.1 at the beggining that can add a move that could be up,... (there is already this function). for an entities.
+1. Unibo university in the background
 
-2. Set in the simulation automated possibility to activate random max_shift and set an interval of the possible value. Same for the other decision_distance,...
-
-3. Unibo university in the background
+2. Sto facendo dei test su automated simulation. 
+Ho appena visto che nel report nel caso di code vs llm non c'è una comparazione effettiva ma c'è la somma dei due. puoi nella stessa schermata mettere entrambi?
 
 
 SCENARIO:

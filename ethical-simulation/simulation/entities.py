@@ -20,7 +20,6 @@ PedestrianModel = Literal[
     "old_woman",
     "boy",
     "girl",
-    "custom",
 ]
 
 # Runtime validation and random generation derive from the same typed source.
@@ -29,9 +28,7 @@ _PEDESTRIAN_MODEL_VALUES = cast(
     get_args(PedestrianModel),
 )
 PEDESTRIAN_MODELS = frozenset(_PEDESTRIAN_MODEL_VALUES)
-PEDESTRIAN_MODEL_CYCLE = tuple(
-    model for model in _PEDESTRIAN_MODEL_VALUES if model != "custom"
-)
+PEDESTRIAN_MODEL_CYCLE = _PEDESTRIAN_MODEL_VALUES
 PEDESTRIAN_MODEL_LABELS: dict[PedestrianModel, str] = {
     "man": "Man",
     "woman": "Woman",
@@ -39,7 +36,14 @@ PEDESTRIAN_MODEL_LABELS: dict[PedestrianModel, str] = {
     "old_woman": "Old woman",
     "boy": "Boy",
     "girl": "Girl",
-    "custom": "Custom",
+}
+PEDESTRIAN_MODEL_COLORS: dict[PedestrianModel, tuple[int, int, int]] = {
+    "man": (45, 80, 160),
+    "woman": (175, 65, 125),
+    "old_man": (100, 110, 125),
+    "old_woman": (125, 85, 145),
+    "boy": (45, 145, 190),
+    "girl": (225, 105, 145),
 }
 PEDESTRIAN_CATEGORY_BY_MODEL: dict[PedestrianModel, str] = {
     "man": "Adult",
@@ -48,13 +52,11 @@ PEDESTRIAN_CATEGORY_BY_MODEL: dict[PedestrianModel, str] = {
     "old_woman": "Elderly",
     "boy": "Child",
     "girl": "Child",
-    "custom": "Custom",
 }
 PEDESTRIAN_CATEGORY_PLURALS = {
     "Child": "Children",
     "Adult": "Adults",
     "Elderly": "Elderly",
-    "Custom": "Custom",
 }
 DEFAULT_CASUALTY_CATEGORIES = ("Child", "Adult", "Elderly")
 

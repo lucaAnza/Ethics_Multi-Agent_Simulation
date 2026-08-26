@@ -39,7 +39,7 @@ from simulation.config import (
     TOP_TOOLBAR_HEIGHT,
     TUNNEL_MARGIN as _TUNNEL_MARGIN,
 )
-from simulation.entities import Car, Pedestrian
+from simulation.entities import Car, PEDESTRIAN_MODEL_COLORS, Pedestrian
 
 
 @dataclass(frozen=True)
@@ -656,15 +656,7 @@ class World:
         is_old = person.model in {"old_man", "old_woman"}
         scale = 0.72 if is_child else 1.0
         skin = (235, 190, 145)
-        clothes = {
-            "man": (45, 80, 160),
-            "woman": (175, 65, 125),
-            "old_man": (100, 110, 125),
-            "old_woman": (125, 85, 145),
-            "boy": (45, 145, 190),
-            "girl": (225, 105, 145),
-            "custom": (245, 150, 40),
-        }[person.model]
+        clothes = PEDESTRIAN_MODEL_COLORS[person.model]
 
         head_y = person.y + 16 * scale
         arcade.draw_circle_filled(person.x, head_y, 9 * scale, skin)

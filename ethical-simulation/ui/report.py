@@ -10,6 +10,7 @@ import arcade
 
 from decision_engine.modes import LLM_MODE
 from ethics.base import DecisionRecord
+from simulation.entities import PEDESTRIAN_MODEL_COLORS, PEDESTRIAN_MODEL_LABELS
 from ui.theme import BORDER, MUTED, PANEL, TEXT
 
 
@@ -19,7 +20,6 @@ CATEGORY_COLORS = {
     "Child": (59, 130, 246),
     "Adult": (249, 115, 22),
     "Elderly": (168, 85, 247),
-    "Custom": (34, 197, 94),
 }
 
 
@@ -33,6 +33,7 @@ class SimulationReportData:
     lane_changes_used: int
     max_lane_changes: int
     casualty_counts: dict[str, int]
+    casualty_entity_counts: dict[str, int]
     decision_history: list[DecisionRecord]
     framework_metrics: list[tuple[str, str]]
 
@@ -230,16 +231,32 @@ class SimulationReportRenderer:
         charts_top = summary_bottom - 14.0
         charts_height = 110.0 if compact else 190.0
         charts_bottom = charts_top - charts_height
-        histogram_width = content_width * 0.59
-        pie_left = margin + histogram_width + gap
-        pie_width = content_width - histogram_width - gap
+        category_width = content_width * 0.30
+        entity_width = content_width * 0.42
+        pie_left = margin + category_width + gap + entity_width + gap
+        pie_width = content_width - category_width - entity_width - gap * 2
         self._draw_histogram(
             margin,
             charts_bottom,
-            histogram_width,
+            category_width,
             charts_height,
             data.casualty_counts,
             compact,
+            key_prefix="category",
+            title="DEATHS BY CATEGORY",
+            colors=CATEGORY_COLORS,
+        )
+        self._draw_histogram(
+            margin + category_width + gap,
+            charts_bottom,
+            entity_width,
+            charts_height,
+            data.casualty_entity_counts,
+            compact,
+            key_prefix="entity",
+            title="DEATHS BY ENTITY",
+            labels=PEDESTRIAN_MODEL_LABELS,
+            colors=PEDESTRIAN_MODEL_COLORS,
         )
         self._draw_lane_change_pie(
             pie_left,
@@ -291,11 +308,16 @@ class SimulationReportRenderer:
         height: float,
         counts: dict[str, int],
         compact: bool,
+        *,
+        key_prefix: str,
+        title: str,
+        labels: dict[str, str] | None = None,
+        colors: dict[str, tuple[int, int, int]] | None = None,
     ) -> None:
         self._draw_panel(left, bottom, width, height)
         self._draw_text(
-            "histogram_title",
-            "DEATHS BY CATEGORY",
+            f"{key_prefix}_histogram_title",
+            title,
             left + 14,
             bottom + height - 20,
             font_size=10,
@@ -318,12 +340,13 @@ class SimulationReportRenderer:
         )
         slot_width = (chart_right - chart_left) / len(categories)
         bar_width = min(56.0, slot_width * 0.52)
+        label_size = 6 if len(categories) > 5 else 7
         for index, (category, value) in enumerate(zip(categories, values)):
             center_x = chart_left + slot_width * (index + 0.5)
             bar_height = (
                 (chart_top - chart_bottom) * value / maximum if value else 2.0
             )
-            color = CATEGORY_COLORS.get(category, (100, 116, 139))
+            color = (colors or {}).get(category, (100, 116, 139))
             arcade.draw_lbwh_rectangle_filled(
                 center_x - bar_width / 2,
                 chart_bottom,
@@ -332,7 +355,7 @@ class SimulationReportRenderer:
                 color,
             )
             self._draw_text(
-                f"hist_value_{index}",
+                f"{key_prefix}_hist_value_{index}",
                 str(value),
                 center_x,
                 chart_bottom + bar_height + 10,
@@ -341,12 +364,12 @@ class SimulationReportRenderer:
                 anchor_x="center",
             )
             self._draw_text(
-                f"hist_label_{index}",
-                category.upper(),
+                f"{key_prefix}_hist_label_{index}",
+                (labels or {}).get(category, category).upper(),
                 center_x,
                 bottom + 11,
                 color=MUTED,
-                font_size=7,
+                font_size=label_size,
                 anchor_x="center",
             )
 

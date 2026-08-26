@@ -13,7 +13,7 @@ def entity_cost(
 ) -> float:
     """Return the configured casualty cost of a visible entity list."""
     return sum(
-        entity_values.get(str(entity.get("model", "custom")), 0.0)
+        entity_values.get(str(entity.get("model", "unknown")), 0.0)
         for entity in entities
     )
 

@@ -118,7 +118,8 @@ class RandomScenarioTests(unittest.TestCase):
 
     def test_runtime_models_derive_from_the_entity_type(self) -> None:
         self.assertEqual(set(get_args(PedestrianModel)), set(PEDESTRIAN_MODELS))
-        self.assertNotIn("custom", PEDESTRIAN_MODEL_CYCLE)
+        self.assertEqual(tuple(get_args(PedestrianModel)), PEDESTRIAN_MODEL_CYCLE)
+        self.assertNotIn("custom", PEDESTRIAN_MODELS)
 
     def test_random_scenario_name_is_reserved_for_the_generator(self) -> None:
         with self.assertRaises(ValueError):

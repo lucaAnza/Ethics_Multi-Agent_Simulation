@@ -97,6 +97,8 @@ class AutomatedSimulationTests(unittest.TestCase):
         self.assertEqual(2, report.total_simulations)
         self.assertEqual([100, 101], [result.seed for result in report.results])
         self.assertEqual(1.0, report.average_deaths)
+        self.assertEqual(1.0, sum(report.average_deaths_by_entity.values()))
+        self.assertEqual(1.0, report.average_deaths_by_entity["man"])
         self.assertEqual({1: 2}, report.lane_change_distribution)
         self.assertTrue(all(result.decision_history for result in report.results))
 
@@ -147,12 +149,14 @@ class AutomatedSimulationTests(unittest.TestCase):
         code = BatchSimulationResult(
             implementation="code",
             total_deaths=1,
+            deaths_by_entity={"man": 1},
             decision_history=[{"action": "STAY"}, {"action": "CHANGE_LANE"}],
             **common,
         )
         llm = BatchSimulationResult(
             implementation="llm-agent",
-            total_deaths=2,
+            total_deaths=1,
+            deaths_by_entity={"woman": 1},
             decision_history=[{"action": "STAY"}, {"action": "STAY"}],
             total_llm_calls=3,
             failed_calls=1,

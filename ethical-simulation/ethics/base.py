@@ -99,7 +99,7 @@ class EthicalFramework(ABC):
     def _describe_lane(entities: list[EntitySnapshot]) -> str:
         counts: dict[str, int] = {}
         for entity in entities:
-            model = str(entity.get("model", "custom"))
+            model = str(entity.get("model", "unknown"))
             category = pedestrian_category(model)
             counts[category] = counts.get(category, 0) + 1
         if not counts:

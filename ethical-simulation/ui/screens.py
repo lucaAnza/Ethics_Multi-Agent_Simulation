@@ -741,6 +741,7 @@ def build_automated_settings(
     on_mode_change: Callable,
     on_framework_change: Callable,
     on_scenario_change: Callable,
+    on_random_scenario_settings: Callable,
     on_start: Callable,
     on_back: Callable,
 ) -> tuple[
@@ -862,19 +863,34 @@ def build_automated_settings(
     )
     add_labeled_control("Random seed (optional)", seed_input)
     if random_scenario_selected:
-        form.add(
+        random_settings_row = arcade.gui.UIBoxLayout(
+            vertical=False,
+            space_between=10,
+            width=row_width,
+            height=36,
+            size_hint_min=(row_width, 36),
+            size_hint_max=(row_width, 36),
+        )
+        random_settings_row.add(
             arcade.gui.UILabel(
-                text=(
-                    "Random generator values are managed in Menu > "
-                    "Scenario Settings > Random Scenario."
-                ),
-                width=row_width,
-                height=34,
+                text="Generator values are shared with interactive runs.",
+                width=392,
+                height=36,
                 font_size=9,
                 text_color=(251, 191, 36),
-                align="center",
+                align="right",
             )
         )
+        random_settings_row.add(
+            _button(
+                "Configure Random Scenario",
+                on_random_scenario_settings,
+                215,
+                variant="scenario",
+                height=36,
+            )
+        )
+        form.add(random_settings_row)
     form.with_background(color=(25, 34, 45, 245))
     form.with_border(width=1, color=(61, 76, 94))
     form.with_padding(all=12)

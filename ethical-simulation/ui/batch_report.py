@@ -8,10 +8,16 @@ import arcade
 
 from automated import BatchProgress, BatchReport
 from decision_engine.modes import LLM_MODE
+from simulation.entities import PEDESTRIAN_MODEL_COLORS, PEDESTRIAN_MODEL_LABELS
 from ui.theme import BORDER, MUTED, PANEL, TEXT
 
 
 ACCENT = (14, 165, 233)
+CATEGORY_COLORS = {
+    "Child": (59, 130, 246),
+    "Adult": (249, 115, 22),
+    "Elderly": (168, 85, 247),
+}
 
 
 def _format_duration(seconds: float | None) -> str:
@@ -290,18 +296,34 @@ class BatchReportRenderer:
         run_height = 135.0 if compact else 172.0
         chart_bottom = run_bottom + run_height + 16.0
         chart_height = max(90.0, card_bottom - chart_bottom - 16.0)
-        chart_width = content_width * 0.56
-        self._draw_category_chart(
+        charts_width = content_width * 0.68
+        category_width = charts_width * 0.38
+        entity_width = charts_width - category_width - gap
+        self._draw_distribution_chart(
             margin,
             chart_bottom,
-            chart_width,
+            category_width,
             chart_height,
-            report.average_deaths_by_category,
+            key_prefix="batch_category",
+            title="AVERAGE DEATHS BY CATEGORY",
+            values=report.average_deaths_by_category,
+            colors=CATEGORY_COLORS,
+        )
+        self._draw_distribution_chart(
+            margin + category_width + gap,
+            chart_bottom,
+            entity_width,
+            chart_height,
+            key_prefix="batch_entity",
+            title="AVERAGE DEATHS BY ENTITY",
+            values=report.average_deaths_by_entity,
+            labels=PEDESTRIAN_MODEL_LABELS,
+            colors=PEDESTRIAN_MODEL_COLORS,
         )
         self._draw_details(
-            margin + chart_width + gap,
+            margin + charts_width + gap,
             chart_bottom,
-            content_width - chart_width - gap,
+            content_width - charts_width - gap,
             chart_height,
             report,
         )
@@ -314,62 +336,64 @@ class BatchReportRenderer:
             compact=compact,
         )
 
-    def _draw_category_chart(
+    def _draw_distribution_chart(
         self,
         left: float,
         bottom: float,
         width: float,
         height: float,
         values: dict[str, float],
+        *,
+        key_prefix: str,
+        title: str,
+        labels: dict[str, str] | None = None,
+        colors: dict[str, tuple[int, int, int]] | None = None,
     ) -> None:
         self._panel(left, bottom, width, height)
         self._text(
-            "batch_categories_title",
-            "AVERAGE DEATHS BY CATEGORY",
+            f"{key_prefix}_title",
+            title,
             left + 15,
             bottom + height - 23,
-            size=10,
+            size=9,
             bold=True,
         )
-        categories = list(values) or ["No deaths"]
+        keys = list(values) or ["No deaths"]
         maximum = max(1.0, *(values.values() or [0.0]))
-        chart_left = left + 42
+        chart_left = left + 18
         chart_bottom = bottom + 34
         chart_top = bottom + height - 48
-        slot = (width - 68) / len(categories)
-        for index, category in enumerate(categories):
-            value = values.get(category, 0.0)
+        slot = (width - 36) / len(keys)
+        label_size = 6 if len(keys) > 5 else 7
+        value_size = 7 if len(keys) > 5 else 8
+        for index, key in enumerate(keys):
+            value = values.get(key, 0.0)
             bar_height = max(2.0, (chart_top - chart_bottom) * value / maximum)
             center_x = chart_left + slot * (index + 0.5)
-            color = {
-                "Child": (59, 130, 246),
-                "Adult": (249, 115, 22),
-                "Elderly": (168, 85, 247),
-                "Custom": (34, 197, 94),
-            }.get(category, (100, 116, 139))
+            color = (colors or {}).get(key, (100, 116, 139))
             arcade.draw_lbwh_rectangle_filled(
-                center_x - min(28, slot * 0.3),
+                center_x - min(24, slot * 0.3),
                 chart_bottom,
-                min(56, slot * 0.6),
+                min(48, slot * 0.6),
                 bar_height,
                 color,
             )
             self._text(
-                f"batch_category_value_{index}",
+                f"{key_prefix}_value_{index}",
                 f"{value:.2f}",
                 center_x,
                 chart_bottom + bar_height + 10,
-                size=8,
+                size=value_size,
                 bold=True,
                 anchor_x="center",
             )
             self._text(
-                f"batch_category_label_{index}",
-                category.upper(),
+                f"{key_prefix}_label_{index}",
+                (labels or {}).get(key, key).upper(),
                 center_x,
                 bottom + 15,
                 color=MUTED,
-                size=7,
+                size=label_size,
                 anchor_x="center",
             )
 

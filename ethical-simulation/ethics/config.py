@@ -39,6 +39,4 @@ DEFAULT_ENTITIES_VALUES = {
     "old_woman": 20.0,
     "boy": 30.0,
     "girl": 30.0,
-    "custom": 10.0,
 }
-
