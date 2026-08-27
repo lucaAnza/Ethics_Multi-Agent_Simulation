@@ -99,8 +99,57 @@ class AutomatedSimulationTests(unittest.TestCase):
         self.assertEqual(1.0, report.average_deaths)
         self.assertEqual(1.0, sum(report.average_deaths_by_entity.values()))
         self.assertEqual(1.0, report.average_deaths_by_entity["man"])
+        self.assertEqual(2, report.total_casualties)
+        self.assertEqual(1.0, report.average_lane_changes)
+        self.assertEqual(2, report.primary_metrics.maximum_lane_changes)
+        self.assertEqual(0.0, report.zero_casualty_rate)
+        self.assertEqual(
+            {"STAY": 0, "CHANGE_LANE": 2},
+            report.action_counts,
+        )
         self.assertEqual({1: 2}, report.lane_change_distribution)
         self.assertTrue(all(result.decision_history for result in report.results))
+
+    def test_single_mode_report_calculates_safety_and_action_metrics(self) -> None:
+        common = dict(
+            framework="Utilitarianism",
+            implementation="code",
+            scenario="Batch Test",
+            max_lane_changes=2,
+            framework_specific_metrics={"Total malus": "0"},
+        )
+        safe = BatchSimulationResult(
+            seed=1,
+            total_deaths=0,
+            deaths_by_category={"Child": 0, "Adult": 0, "Elderly": 0},
+            deaths_by_entity={},
+            lane_changes_used=0,
+            number_of_decisions=1,
+            decision_history=[{"action": "STAY"}],
+            **common,
+        )
+        casualties = BatchSimulationResult(
+            seed=2,
+            total_deaths=2,
+            deaths_by_category={"Child": 2, "Adult": 0, "Elderly": 0},
+            deaths_by_entity={"boy": 2},
+            lane_changes_used=2,
+            number_of_decisions=2,
+            decision_history=[{"action": "STAY"}, {"action": "CHANGE_LANE"}],
+            **common,
+        )
+        report = BatchReport(
+            mode=ONLY_DETERMINISTIC,
+            requested_units=2,
+            results=(safe, casualties),
+        )
+        metrics = report.primary_metrics
+
+        self.assertEqual(2, metrics.total_casualties)
+        self.assertEqual(1.0, metrics.average_lane_changes)
+        self.assertEqual(50.0, metrics.zero_casualty_rate)
+        self.assertEqual({"STAY": 2, "CHANGE_LANE": 1}, metrics.action_counts)
+        self.assertAlmostEqual(2 / 3 * 100, metrics.action_percentage("STAY"))
 
     def test_paired_runner_reuses_the_same_seed_for_code_and_llm(self) -> None:
         runner = AutomatedSimulationRunner(
@@ -155,14 +204,20 @@ class AutomatedSimulationTests(unittest.TestCase):
         )
         llm = BatchSimulationResult(
             implementation="llm-agent",
-            total_deaths=1,
-            deaths_by_entity={"woman": 1},
+            total_deaths=2,
+            deaths_by_category={"Child": 2, "Adult": 0, "Elderly": 0},
+            deaths_by_entity={"girl": 2},
             decision_history=[{"action": "STAY"}, {"action": "STAY"}],
+            average_latency_ms=250.0,
             total_llm_calls=3,
             failed_calls=1,
             retries=1,
             fallbacks=0,
-            **common,
+            **{
+                key: value
+                for key, value in common.items()
+                if key != "deaths_by_category"
+            },
         )
         report = BatchReport(
             mode=COMPARISON,
@@ -171,7 +226,12 @@ class AutomatedSimulationTests(unittest.TestCase):
         )
 
         self.assertEqual(50.0, report.decision_agreement_rate)
+        self.assertEqual(1, report.casualty_difference)
+        self.assertEqual(0.0, report.category_specific_agreement)
         self.assertEqual(1, report.different_final_results)
+        self.assertEqual(1, report.metrics_for("code").total_casualties)
+        self.assertEqual(2, report.metrics_for("llm-agent").total_casualties)
+        self.assertEqual(250.0, report.average_llm_latency_ms)
         self.assertEqual(3, report.total_llm_calls)
         self.assertEqual(1, report.failed_llm_calls)
 

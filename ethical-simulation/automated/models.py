@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict
-from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from itertools import zip_longest
 from typing import Any
 
-from decision_engine.modes import CODE_MODE, LLM_MODE
+from decision_engine.modes import LLM_MODE
 from ethics.base import DecisionRecord
 from scenarios import (
     DEFAULT_RANDOM_SCENARIO_SETTINGS,
@@ -21,20 +18,12 @@ from .config import (
     MAX_LLM_BATCH_RUNS,
     ONLY_DETERMINISTIC,
 )
-
-
-def _average_counts(
-    distributions: Iterable[Mapping[str, int]],
-    denominator: int,
-) -> dict[str, float]:
-    totals: defaultdict[str, int] = defaultdict(int)
-    for distribution in distributions:
-        for key, count in distribution.items():
-            totals[key] += count
-    return {
-        key: total / denominator
-        for key, total in totals.items()
-    }
+from .statistics import (
+    ImplementationMetrics,
+    PairedComparisonMetrics,
+    aggregate_results,
+    compare_paired_results,
+)
 
 
 @dataclass(frozen=True)
@@ -124,151 +113,147 @@ class BatchReport:
     results: tuple[BatchSimulationResult, ...]
     cancelled: bool = False
     error: str | None = None
+    implementation_metrics: dict[str, ImplementationMetrics] = field(init=False)
+    overall_metrics: ImplementationMetrics = field(init=False)
+    comparison_metrics: PairedComparisonMetrics | None = field(init=False)
+    total_casualties: int = field(init=False)
     average_deaths: float = field(init=False)
     average_deaths_by_category: dict[str, float] = field(init=False)
     average_deaths_by_entity: dict[str, float] = field(init=False)
+    average_lane_changes: float = field(init=False)
     lane_change_distribution: dict[int, int] = field(init=False)
     average_decisions: float = field(init=False)
+    action_counts: dict[str, int] = field(init=False)
+    zero_casualty_rate: float = field(init=False)
     average_llm_latency_ms: float | None = field(init=False)
     total_llm_calls: int = field(init=False)
     failed_llm_calls: int = field(init=False)
     retries: int = field(init=False)
     fallbacks: int = field(init=False)
     decision_agreement_rate: float | None = field(init=False)
+    casualty_difference: int | None = field(init=False)
+    average_casualty_difference: float | None = field(init=False)
+    category_specific_agreement: float | None = field(init=False)
     different_final_results: int | None = field(init=False)
     average_framework_metrics: dict[str, str] = field(init=False)
 
     def __post_init__(self) -> None:
-        result_count = len(self.results)
-        denominator = max(1, result_count)
+        implementations = dict.fromkeys(
+            result.implementation for result in self.results
+        )
+        implementation_metrics = {
+            implementation: aggregate_results(
+                (
+                    result
+                    for result in self.results
+                    if result.implementation == implementation
+                ),
+                implementation=implementation,
+            )
+            for implementation in implementations
+        }
+        overall = aggregate_results(self.results, implementation="all")
+        comparison = (
+            compare_paired_results(self.results)
+            if self.mode == COMPARISON
+            else None
+        )
+        object.__setattr__(self, "implementation_metrics", implementation_metrics)
+        object.__setattr__(self, "overall_metrics", overall)
+        object.__setattr__(self, "comparison_metrics", comparison)
+        object.__setattr__(self, "total_casualties", overall.total_casualties)
         object.__setattr__(
             self,
             "average_deaths",
-            sum(result.total_deaths for result in self.results) / denominator,
+            overall.average_casualties,
         )
-
         object.__setattr__(
             self,
             "average_deaths_by_category",
-            _average_counts(
-                (result.deaths_by_category for result in self.results),
-                denominator,
-            ),
+            overall.average_casualties_by_category,
         )
         object.__setattr__(
             self,
             "average_deaths_by_entity",
-            _average_counts(
-                (result.deaths_by_entity for result in self.results),
-                denominator,
-            ),
+            overall.average_casualties_by_entity,
         )
+        object.__setattr__(self, "average_lane_changes", overall.average_lane_changes)
         object.__setattr__(
             self,
             "lane_change_distribution",
-            dict(sorted(Counter(r.lane_changes_used for r in self.results).items())),
+            overall.lane_change_distribution,
         )
-        object.__setattr__(
-            self,
-            "average_decisions",
-            sum(result.number_of_decisions for result in self.results) / denominator,
-        )
+        object.__setattr__(self, "average_decisions", overall.average_decisions)
+        object.__setattr__(self, "action_counts", overall.action_counts)
+        object.__setattr__(self, "zero_casualty_rate", overall.zero_casualty_rate)
 
-        llm_results = [r for r in self.results if r.implementation == LLM_MODE]
-        weighted_latencies = [
-            (r.average_latency_ms, r.number_of_decisions)
-            for r in llm_results
-            if r.average_latency_ms is not None and r.number_of_decisions > 0
-        ]
+        llm_metrics = implementation_metrics.get(LLM_MODE)
         object.__setattr__(
             self,
             "average_llm_latency_ms",
-            (
-                sum(latency * count for latency, count in weighted_latencies)
-                / sum(count for _latency, count in weighted_latencies)
-                if weighted_latencies
-                else None
-            ),
+            llm_metrics.average_llm_latency_ms if llm_metrics else None,
         )
         object.__setattr__(
             self,
             "total_llm_calls",
-            sum(r.total_llm_calls for r in llm_results),
+            llm_metrics.total_llm_calls if llm_metrics else 0,
         )
         object.__setattr__(
             self,
             "failed_llm_calls",
-            sum(r.failed_calls for r in llm_results),
+            llm_metrics.failed_llm_calls if llm_metrics else 0,
         )
-        object.__setattr__(self, "retries", sum(r.retries for r in llm_results))
-        object.__setattr__(self, "fallbacks", sum(r.fallbacks for r in llm_results))
-
-        agreement, different = self._comparison_statistics()
-        object.__setattr__(self, "decision_agreement_rate", agreement)
-        object.__setattr__(self, "different_final_results", different)
+        object.__setattr__(self, "retries", llm_metrics.retries if llm_metrics else 0)
+        object.__setattr__(
+            self,
+            "fallbacks",
+            llm_metrics.fallbacks if llm_metrics else 0,
+        )
+        object.__setattr__(
+            self,
+            "decision_agreement_rate",
+            comparison.decision_agreement_rate if comparison else None,
+        )
+        object.__setattr__(
+            self,
+            "casualty_difference",
+            comparison.casualty_difference if comparison else None,
+        )
+        object.__setattr__(
+            self,
+            "average_casualty_difference",
+            comparison.average_casualty_difference if comparison else None,
+        )
+        object.__setattr__(
+            self,
+            "category_specific_agreement",
+            comparison.category_specific_agreement if comparison else None,
+        )
+        object.__setattr__(
+            self,
+            "different_final_results",
+            comparison.different_final_results if comparison else None,
+        )
         object.__setattr__(
             self,
             "average_framework_metrics",
-            self._aggregate_framework_metrics(),
+            overall.average_framework_metrics,
         )
 
     @property
     def total_simulations(self) -> int:
         return len(self.results)
 
-    def _comparison_statistics(self) -> tuple[float | None, int | None]:
-        if self.mode != COMPARISON:
-            return None, None
-        pairs: defaultdict[int, dict[str, BatchSimulationResult]] = defaultdict(dict)
-        for result in self.results:
-            if result.pair_id is not None:
-                pairs[result.pair_id][result.implementation] = result
-
-        agreements = 0
-        compared = 0
-        different_results = 0
-        complete_pairs = 0
-        for pair in pairs.values():
-            code = pair.get(CODE_MODE)
-            llm = pair.get(LLM_MODE)
-            if code is None or llm is None:
-                continue
-            complete_pairs += 1
-            code_actions = [record.get("action") for record in code.decision_history]
-            llm_actions = [record.get("action") for record in llm.decision_history]
-            for code_action, llm_action in zip_longest(code_actions, llm_actions):
-                compared += 1
-                agreements += int(code_action == llm_action)
-            if (
-                code.total_deaths != llm.total_deaths
-                or code.deaths_by_category != llm.deaths_by_category
-                or code.deaths_by_entity != llm.deaths_by_entity
-            ):
-                different_results += 1
-        if complete_pairs == 0:
-            return None, None
-        rate = 100.0 if compared == 0 else agreements * 100.0 / compared
-        return rate, different_results
-
-    def _aggregate_framework_metrics(self) -> dict[str, str]:
-        numeric: defaultdict[str, list[float]] = defaultdict(list)
-        categorical: defaultdict[str, set[str]] = defaultdict(set)
-        for result in self.results:
-            for label, raw_value in result.framework_specific_metrics.items():
-                if label.lower() == "decisions":
-                    continue
-                try:
-                    numeric[label].append(float(raw_value))
-                except (TypeError, ValueError):
-                    categorical[label].add(str(raw_value))
-        metrics = {
-            f"Average {label}": f"{sum(values) / len(values):.2f}"
-            for label, values in numeric.items()
-        }
-        metrics.update(
-            {
-                label: next(iter(values)) if len(values) == 1 else "Mixed"
-                for label, values in categorical.items()
-            }
+    def metrics_for(self, implementation: str) -> ImplementationMetrics:
+        """Return per-implementation values, including an empty safe result."""
+        return self.implementation_metrics.get(implementation) or aggregate_results(
+            (),
+            implementation=implementation,
         )
-        return metrics
+
+    @property
+    def primary_metrics(self) -> ImplementationMetrics:
+        """Return the single implementation, or overall values as a fallback."""
+        if len(self.implementation_metrics) == 1:
+            return next(iter(self.implementation_metrics.values()))
+        return self.overall_metrics

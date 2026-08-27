@@ -25,10 +25,10 @@ The project aims to achieve the following objectives:
   * **Deontology (Constant)** (rule-based decision-making flexible)
   * **Virtue ethics** (make the ai made choose from himself)
 
-* **Integrate LLM-based decision-making** // TODO
+* **Integrate LLM-based decision-making** ✅
   Use one or more Large Language Models as agents operating inside the simulation. These agents will receive partial observations of the environment and will be prompted to make decisions according to a specified ethical perspective.
 
-* **Simulate and compare behaviors** // TODO
+* **Simulate and compare behaviors** ✅
   Run multiple simulations across randomly generated scenarios to observe:
 
   * differences in chosen actions

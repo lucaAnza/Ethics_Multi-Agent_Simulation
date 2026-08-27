@@ -12,6 +12,7 @@ from .models import (
     BatchSimulationResult,
 )
 from .runner import AutomatedSimulationRunner
+from .statistics import ImplementationMetrics, PairedComparisonMetrics
 
 __all__ = [
     "COMPARISON",
@@ -22,4 +23,6 @@ __all__ = [
     "BatchProgress",
     "BatchReport",
     "BatchSimulationResult",
+    "ImplementationMetrics",
+    "PairedComparisonMetrics",
 ]
