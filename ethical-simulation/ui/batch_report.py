@@ -877,9 +877,13 @@ class BatchReportRenderer:
         llm_footer_height = 30.0 if metrics.implementation == LLM_MODE else 0.0
         error_height = 14.0 if error else 0.0
         footer_height = llm_footer_height + error_height
-        card_bottom = bottom + 9 + footer_height
         card_top = bottom + height - 34
-        card_height = max(18.0, card_top - card_bottom)
+        available_card_height = max(
+            18.0,
+            card_top - (bottom + 9 + footer_height),
+        )
+        card_height = min(54.0, available_card_height)
+        card_bottom = card_top - card_height
         items = list(metrics.average_framework_metrics.items())
         if not items:
             self._text(
@@ -893,7 +897,8 @@ class BatchReportRenderer:
             )
         else:
             gap = 7.0
-            card_width = (width - 20 - gap * (len(items) - 1)) / len(items)
+            available_width = width - 20 - gap * (len(items) - 1)
+            card_width = min(220.0, available_width / len(items))
             for index, (label, value) in enumerate(items):
                 card_left = left + 10 + index * (card_width + gap)
                 arcade.draw_lbwh_rectangle_filled(

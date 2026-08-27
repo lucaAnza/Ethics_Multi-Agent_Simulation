@@ -252,6 +252,13 @@ The report includes aggregated information such as the total number of
 casualties, casualties divided by category, the number of lane changes
 used, and framework-specific metrics.
 
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{img/report.png}
+    \caption{Report section}
+    \label{fig:report}
+\end{figure}
+
 It also includes a detailed decision history. For each decision, the
 report shows the vehicle position, the situation observed in the current
 and adjacent lanes, the selected action, and the motivation produced by
@@ -259,9 +266,9 @@ the ethical framework.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=1\linewidth]{img/report.png}
-    \caption{Report section}
-    \label{fig:report}
+    \includegraphics[width=1\linewidth]{img/decision_history.png}
+    \caption{Decision history section}
+    \label{fig:decision_history}
 \end{figure}
 
 
@@ -422,12 +429,82 @@ Utilitarianism (llm-agent)
 Kant (code)
 Kant (llm-agent)
 
-Constant (code)
-Constant (llm-agent)
+...
 \end{verbatim}
 
+\subsection{Rule-Based Agent}
 
-\subsection{LLM Prompt}
+The rule-based agent implements the ethical frameworks directly in code
+and therefore produces decisions synchronously and deterministically.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.4\textwidth]{img/determistic_agent_flow.png}
+    \caption{Decision flow of the deterministic rule-based agent.}
+    \label{fig:deterministic-agent-flow}
+\end{figure}
+
+During the \texttt{DRIVING} phase, the simulation continuously evaluates
+the environment. When an unhandled incident in the current lane reaches
+the configured decision distance, the simulator constructs an immutable
+\texttt{DecisionContext}. The context contains the vehicle position, the
+entities visible in the current and adjacent lanes, and the number of
+remaining lane changes.
+
+The context is then passed to the \texttt{CodeDecisionEngine}, which
+delegates the decision to the currently selected ethical framework.
+The deterministic implementation differs according to the framework:
+
+\begin{itemize}
+    \item \textbf{Utilitarianism}: the cost associated with the visible
+    entities in each lane is computed using the configured entity values.
+    The lane with the lower casualty cost is selected. In case of equal
+    costs, the vehicle remains in its current lane.
+
+    \item \textbf{Kant}: enabled moral rules are evaluated according to
+    their configured priority. The first applicable rule determines the
+    action. If no enabled rule resolves the situation, the default action
+    is \texttt{STAY}.
+
+    \item \textbf{Constant}: all enabled moral rules are evaluated at the
+    same priority level. If all applicable rules agree, their common action
+    is selected. If they conflict, the conflict is resolved through the
+    configured utilitarian evaluation. If no rule applies, the default
+    action is \texttt{STAY}.
+\end{itemize}
+
+The framework returns an \texttt{EthicalDecision} containing the
+recommended action, its explanation, and framework-specific metadata.
+The possible actions are
+
+\begin{center}
+\texttt{STAY}
+\qquad\text{or}\qquad
+\texttt{CHANGE\_LANE}.
+\end{center}
+
+The recommended action is subsequently validated by the simulation
+engine. In particular, a \texttt{CHANGE\_LANE} recommendation is applied
+only if the world can actually start the lane-change maneuver. If the
+maneuver is unavailable, for example because the maximum number of lane
+changes has already been reached, the applied action becomes
+\texttt{STAY}.
+
+The distinction between the \emph{recommended decision} and the
+\emph{applied decision} is preserved in the simulation event and allows
+the evaluation phase to distinguish ethical recommendations from
+execution constraints.
+
+Figure~\ref{fig:deterministic-agent-flow} summarizes the complete
+deterministic decision process.
+
+
+\subsection{LLM Agent}
+
+The LLM-based agent follows a decision process similar to the one shown in Figure~\ref{fig:deterministic-agent-flow}, but uses a different decision engine, namely the \texttt{LLMDecisionEngine}, to obtain the ethical decision from the language model.
+
+
+\subsubsection{Prompt}
 
 The LLM prompt is constructed from four components:
 
@@ -449,7 +526,7 @@ The user can instead provide additional natural-language instructions
 through the framework settings.
 
 
-\subsection{Asynchronous Decisions}
+\subsubsection{Asynchronous Decisions}
 
 LLM requests must not block the Arcade rendering loop.
 
@@ -487,6 +564,7 @@ For example:
 }
 \end{verbatim}
 
+In the Simulation section is possible to see the user interface for this kind of data [\ref{fig:decision_history}]
 For LLM agents, additional information are recorded:
 
 \begin{itemize}
@@ -689,6 +767,12 @@ across multiple runs.
     \item \textbf{Average casualties per simulation}: mean number of
     casualties across all runs.
 
+    \item \textbf{Average lane changes}: mean number of lane changes across
+    all simulations.
+
+    \item \textbf{Average decision per simulation}: mean number of
+    decision across all runs.
+
     \item \textbf{Casualties by general category}: number of casualties for each
     entity category (adult,...)
 
@@ -700,9 +784,6 @@ across multiple runs.
 
     \item \textbf{Lane changes used}: number of lane changes performed
     during a simulation.
-
-    \item \textbf{Average lane changes}: mean number of lane changes across
-    all simulations.
 
     \item \textbf{STAY / CHANGE\_LANE ratio}: distribution of the two
     possible actions selected by the agent.
