@@ -380,7 +380,7 @@ class BatchReportRenderer:
     @staticmethod
     def _signed(value: float, *, decimals: int = 2, suffix: str = "") -> str:
         if value == 0:
-            return f"0{suffix}"
+            return "0"
         return f"{value:+.{decimals}f}{suffix}"
 
     @staticmethod
@@ -605,7 +605,7 @@ class BatchReportRenderer:
         )
         columns = (0.44, 0.65, 0.82, 0.97)
         for index, (header, ratio) in enumerate(
-            zip(("METRIC", "CODE", "LLM", "Δ LLM − CODE"), columns)
+            zip(("METRIC", "CODE", "LLM", "Δ LLM -CODE"), columns)
         ):
             self._text(
                 f"comparison_header_{index}",
