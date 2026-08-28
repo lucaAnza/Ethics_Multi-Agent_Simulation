@@ -33,7 +33,7 @@ from simulation.config import (
     MAX_CONFIGURABLE_DECISION_DISTANCE,
     MIN_CONFIGURABLE_DECISION_DISTANCE,
 )
-from simulation.entities import PEDESTRIAN_ACTION_LABELS, PEDESTRIAN_MODEL_LABELS
+from simulation.entities import PEDESTRIAN_ACTION_LABELS, PEDESTRIAN_MODEL_INFO
 from ui.theme import (
     FRAMEWORK_SELECTION,
     MODE_SELECTION,
@@ -455,8 +455,9 @@ def build_framework_settings(
             rank_labels[entity_model] = rank_label
             row.add(rank_holder)
             medal_dots[entity_model] = row.add(RankDot())
+            model_info = PEDESTRIAN_MODEL_INFO.get(entity_model)
             entity_holder, _entity_label = _fixed_label(
-                PEDESTRIAN_MODEL_LABELS.get(entity_model, entity_model),
+                model_info["label"] if model_info is not None else entity_model,
                 width=174,
             )
             row.add(entity_holder)
@@ -1259,14 +1260,18 @@ def build_scenario_settings(
             text_color=MUTED,
         )
         model_row.add(model_holder)
-        selected_model_label = PEDESTRIAN_MODEL_LABELS.get(
-            entity["model"],
-            entity["model"],
+        selected_model_info = PEDESTRIAN_MODEL_INFO.get(entity["model"])
+        selected_model_label = (
+            selected_model_info["label"]
+            if selected_model_info is not None
+            else entity["model"]
         )
         model_dropdown = model_row.add(
             arcade.gui.UIDropdown(
                 default=selected_model_label,
-                options=list(PEDESTRIAN_MODEL_LABELS.values()),
+                options=[
+                    info["label"] for info in PEDESTRIAN_MODEL_INFO.values()
+                ],
                 width=220,
                 height=36,
             )

@@ -14,7 +14,7 @@ from automated import (
 )
 from decision_engine.modes import CODE_MODE, LLM_MODE
 from ethics.base import CHANGE_LANE, STAY
-from simulation.entities import PEDESTRIAN_MODEL_COLORS, PEDESTRIAN_MODEL_LABELS
+from simulation.entities import PEDESTRIAN_MODEL_INFO
 from ui.theme import BORDER, MUTED, PANEL, TEXT
 
 
@@ -344,8 +344,14 @@ class BatchReportRenderer:
             key_prefix="batch_entity",
             title="AVERAGE DEATHS BY ENTITY",
             values=metrics.average_casualties_by_entity,
-            labels=PEDESTRIAN_MODEL_LABELS,
-            colors=PEDESTRIAN_MODEL_COLORS,
+            labels={
+                model: info["label"]
+                for model, info in PEDESTRIAN_MODEL_INFO.items()
+            },
+            colors={
+                model: info["color"]
+                for model, info in PEDESTRIAN_MODEL_INFO.items()
+            },
         )
         side_left = margin + charts_width + gap
         side_width = content_width - charts_width - gap
@@ -575,7 +581,10 @@ class BatchReportRenderer:
             key_prefix="comparison_entity",
             code_values=code.average_casualties_by_entity,
             llm_values=llm.average_casualties_by_entity,
-            labels=PEDESTRIAN_MODEL_LABELS,
+            labels={
+                model: info["label"]
+                for model, info in PEDESTRIAN_MODEL_INFO.items()
+            },
         )
         self._draw_pair_table(
             margin,

@@ -9,8 +9,6 @@ from typing import get_args
 from scenarios import (
     DEFAULT_SCENARIO_DEFINITIONS,
     MOVING_PEDESTRIAN_ACTIONS,
-    PEDESTRIAN_MODEL_CYCLE,
-    PEDESTRIAN_MODELS,
     RANDOM_SCENARIO_NAME,
     RandomScenarioSettings,
     generate_random_scenario_definition,
@@ -18,7 +16,7 @@ from scenarios import (
     save_scenario_settings,
     validate_scenario_definitions,
 )
-from simulation.entities import PedestrianModel
+from simulation.entities import PEDESTRIAN_MODEL_INFO, PedestrianModel
 from simulation.world import World
 
 
@@ -117,9 +115,11 @@ class RandomScenarioTests(unittest.TestCase):
         )
 
     def test_runtime_models_derive_from_the_entity_type(self) -> None:
-        self.assertEqual(set(get_args(PedestrianModel)), set(PEDESTRIAN_MODELS))
-        self.assertEqual(tuple(get_args(PedestrianModel)), PEDESTRIAN_MODEL_CYCLE)
-        self.assertNotIn("custom", PEDESTRIAN_MODELS)
+        self.assertEqual(
+            tuple(get_args(PedestrianModel)),
+            tuple(PEDESTRIAN_MODEL_INFO),
+        )
+        self.assertNotIn("custom", PEDESTRIAN_MODEL_INFO)
 
     def test_random_scenario_name_is_reserved_for_the_generator(self) -> None:
         with self.assertRaises(ValueError):
@@ -158,7 +158,7 @@ class RandomScenarioTests(unittest.TestCase):
         pedestrians = first["pedestrians"]
         self.assertEqual(7, len(pedestrians))
         self.assertEqual(
-            set(PEDESTRIAN_MODEL_CYCLE),
+            set(PEDESTRIAN_MODEL_INFO),
             {pedestrian["model"] for pedestrian in pedestrians},
         )
         self.assertTrue(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from typing import get_args
 
 from decision_engine.modes import CODE_MODE, IMPLEMENTATION_MODES, LLM_MODE
 from ethics.utils.config import (
@@ -31,13 +32,14 @@ from simulation.units import (
     VEHICLE_PIXELS_PER_SECOND_PER_KMH as EXPORTED_SPEED_FACTOR,
 )
 from simulation.entities import (
+    DEFAULT_CASUALTY_CATEGORIES,
     PEDESTRIAN_ACTION_LABELS,
     PEDESTRIAN_ACTIONS,
-    PEDESTRIAN_CATEGORY_BY_MODEL,
-    PEDESTRIAN_MODEL_LABELS,
-    PEDESTRIAN_MODELS,
+    PEDESTRIAN_MODEL_INFO,
     Car,
     Pedestrian,
+    PedestrianModel,
+    pedestrian_category_plural,
 )
 from simulation.world import World
 
@@ -51,10 +53,38 @@ class SharedConfigurationTests(unittest.TestCase):
         )
 
     def test_entity_metadata_covers_the_typed_runtime_catalogs(self) -> None:
-        self.assertEqual(PEDESTRIAN_MODELS, PEDESTRIAN_MODEL_LABELS.keys())
-        self.assertEqual(PEDESTRIAN_MODELS, PEDESTRIAN_CATEGORY_BY_MODEL.keys())
-        self.assertEqual(PEDESTRIAN_MODELS, DEFAULT_ENTITIES_VALUES.keys())
+        self.assertEqual(set(get_args(PedestrianModel)), PEDESTRIAN_MODEL_INFO.keys())
+        self.assertEqual(PEDESTRIAN_MODEL_INFO.keys(), DEFAULT_ENTITIES_VALUES.keys())
         self.assertEqual(PEDESTRIAN_ACTIONS, PEDESTRIAN_ACTION_LABELS.keys())
+
+        self.assertEqual(
+            DEFAULT_CASUALTY_CATEGORIES,
+            tuple(
+                dict.fromkeys(
+                    info["category"]
+                    for info in sorted(
+                        PEDESTRIAN_MODEL_INFO.values(),
+                        key=lambda info: info["category_order"],
+                    )
+                )
+            ),
+        )
+        self.assertEqual(
+            DEFAULT_CASUALTY_CATEGORIES,
+            ("Child", "Adult", "Elderly"),
+        )
+
+        category_metadata: dict[str, tuple[str, int]] = {}
+        for info in PEDESTRIAN_MODEL_INFO.values():
+            details = (info["category_plural"], info["category_order"])
+            self.assertEqual(
+                category_metadata.setdefault(info["category"], details),
+                details,
+            )
+            self.assertEqual(
+                info["category_plural"],
+                pedestrian_category_plural(info["category"]),
+            )
 
     def test_framework_catalog_and_prompts_use_the_same_modes(self) -> None:
         self.assertEqual((CODE_MODE, LLM_MODE), IMPLEMENTATION_MODES)

@@ -10,7 +10,7 @@ import arcade
 
 from decision_engine.modes import LLM_MODE
 from ethics.base import DecisionRecord
-from simulation.entities import PEDESTRIAN_MODEL_COLORS, PEDESTRIAN_MODEL_LABELS
+from simulation.entities import PEDESTRIAN_MODEL_INFO
 from ui.theme import BORDER, MUTED, PANEL, TEXT
 
 
@@ -255,8 +255,14 @@ class SimulationReportRenderer:
             compact,
             key_prefix="entity",
             title="DEATHS BY ENTITY",
-            labels=PEDESTRIAN_MODEL_LABELS,
-            colors=PEDESTRIAN_MODEL_COLORS,
+            labels={
+                model: info["label"]
+                for model, info in PEDESTRIAN_MODEL_INFO.items()
+            },
+            colors={
+                model: info["color"]
+                for model, info in PEDESTRIAN_MODEL_INFO.items()
+            },
         )
         self._draw_lane_change_pie(
             pie_left,

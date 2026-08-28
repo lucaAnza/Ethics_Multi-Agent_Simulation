@@ -84,7 +84,7 @@ from simulation.config import (
 )
 from simulation.entities import (
     PEDESTRIAN_ACTION_LABELS,
-    PEDESTRIAN_MODEL_LABELS,
+    PEDESTRIAN_MODEL_INFO,
     Pedestrian,
 )
 from simulation.statistics import casualty_category_counts, casualty_entity_counts
@@ -1125,8 +1125,8 @@ class SimulationWindow(arcade.Window):
             model = next(
                 (
                     key
-                    for key, display_name in PEDESTRIAN_MODEL_LABELS.items()
-                    if display_name == selected_label
+                    for key, info in PEDESTRIAN_MODEL_INFO.items()
+                    if info["label"] == selected_label
                 ),
                 "man",
             )

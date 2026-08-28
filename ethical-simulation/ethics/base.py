@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, TypeAlias
 
-from simulation.entities import PEDESTRIAN_CATEGORY_PLURALS, pedestrian_category
+from simulation.entities import pedestrian_category, pedestrian_category_plural
 
 
 STAY = "STAY"
@@ -97,7 +97,7 @@ class EthicalFramework(ABC):
             display_category = (
                 category
                 if count == 1
-                else PEDESTRIAN_CATEGORY_PLURALS.get(category, f"{category}s")
+                else pedestrian_category_plural(category)
             )
             descriptions.append(f"{count} {display_category}")
         return ", ".join(descriptions)

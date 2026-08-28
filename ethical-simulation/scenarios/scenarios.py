@@ -16,8 +16,7 @@ from simulation.config import DEFAULT_WINDOW_WIDTH
 from simulation.entities import (
     MOVING_PEDESTRIAN_ACTIONS,
     PEDESTRIAN_ACTIONS,
-    PEDESTRIAN_MODEL_CYCLE,
-    PEDESTRIAN_MODELS,
+    PEDESTRIAN_MODEL_INFO,
 )
 from simulation.entity_factory import EntityFactory
 
@@ -121,7 +120,7 @@ def validate_scenario_definitions(
                     f"{raw_name}.pedestrians[{index}] must be an object"
                 )
             model = raw_person.get("model", "man")
-            if model not in PEDESTRIAN_MODELS:
+            if model not in PEDESTRIAN_MODEL_INFO:
                 raise ValueError(f"unsupported pedestrian model: {model}")
             raw_label = raw_person.get("label")
             label = str(raw_label).strip() if raw_label is not None else ""
@@ -289,7 +288,7 @@ def _generate_random_definition(
 
     models: list[str] = []
     while len(models) < entity_count:
-        cycle = list(PEDESTRIAN_MODEL_CYCLE)
+        cycle = list(PEDESTRIAN_MODEL_INFO)
         rng.shuffle(cycle)
         if models and cycle[0] == models[-1]:
             swap_index = next(

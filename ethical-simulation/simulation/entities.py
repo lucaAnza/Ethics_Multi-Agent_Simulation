@@ -3,7 +3,7 @@
 import math
 import random
 from dataclasses import dataclass, field
-from typing import Literal, cast, get_args
+from typing import Literal, TypedDict, cast, get_args
 
 from .config import (
     DEFAULT_PEDESTRIAN_SPEED,
@@ -22,49 +22,90 @@ PedestrianModel = Literal[
     "girl",
 ]
 
-# Runtime validation and random generation derive from the same typed source.
-_PEDESTRIAN_MODEL_VALUES = cast(
-    tuple[PedestrianModel, ...],
-    get_args(PedestrianModel),
+
+class PedestrianModelInfo(TypedDict):
+    """Display and reporting metadata associated with a pedestrian model."""
+
+    label: str
+    color: tuple[int, int, int]
+    category: str
+    category_plural: str
+    category_order: int
+
+
+PEDESTRIAN_MODEL_INFO: dict[PedestrianModel, PedestrianModelInfo] = {
+    "man": {
+        "label": "Man",
+        "color": (45, 80, 160),
+        "category": "Adult",
+        "category_plural": "Adults",
+        "category_order": 1,
+    },
+    "woman": {
+        "label": "Woman",
+        "color": (175, 65, 125),
+        "category": "Adult",
+        "category_plural": "Adults",
+        "category_order": 1,
+    },
+    "old_man": {
+        "label": "Old man",
+        "color": (100, 110, 125),
+        "category": "Elderly",
+        "category_plural": "Elderly",
+        "category_order": 2,
+    },
+    "old_woman": {
+        "label": "Old woman",
+        "color": (125, 85, 145),
+        "category": "Elderly",
+        "category_plural": "Elderly",
+        "category_order": 2,
+    },
+    "boy": {
+        "label": "Boy",
+        "color": (45, 145, 190),
+        "category": "Child",
+        "category_plural": "Children",
+        "category_order": 0,
+    },
+    "girl": {
+        "label": "Girl",
+        "color": (225, 105, 145),
+        "category": "Child",
+        "category_plural": "Children",
+        "category_order": 0,
+    },
+}
+
+# Category reporting order derives from the same model metadata catalog.
+DEFAULT_CASUALTY_CATEGORIES = tuple(
+    dict.fromkeys(
+        info["category"]
+        for info in sorted(
+            PEDESTRIAN_MODEL_INFO.values(),
+            key=lambda info: info["category_order"],
+        )
+    )
 )
-PEDESTRIAN_MODELS = frozenset(_PEDESTRIAN_MODEL_VALUES)
-PEDESTRIAN_MODEL_CYCLE = _PEDESTRIAN_MODEL_VALUES
-PEDESTRIAN_MODEL_LABELS: dict[PedestrianModel, str] = {
-    "man": "Man",
-    "woman": "Woman",
-    "old_man": "Old man",
-    "old_woman": "Old woman",
-    "boy": "Boy",
-    "girl": "Girl",
-}
-PEDESTRIAN_MODEL_COLORS: dict[PedestrianModel, tuple[int, int, int]] = {
-    "man": (45, 80, 160),
-    "woman": (175, 65, 125),
-    "old_man": (100, 110, 125),
-    "old_woman": (125, 85, 145),
-    "boy": (45, 145, 190),
-    "girl": (225, 105, 145),
-}
-PEDESTRIAN_CATEGORY_BY_MODEL: dict[PedestrianModel, str] = {
-    "man": "Adult",
-    "woman": "Adult",
-    "old_man": "Elderly",
-    "old_woman": "Elderly",
-    "boy": "Child",
-    "girl": "Child",
-}
-PEDESTRIAN_CATEGORY_PLURALS = {
-    "Child": "Children",
-    "Adult": "Adults",
-    "Elderly": "Elderly",
-}
-DEFAULT_CASUALTY_CATEGORIES = ("Child", "Adult", "Elderly")
+
+
+def pedestrian_category_plural(category: str) -> str:
+    """Return the configured plural for a pedestrian reporting category."""
+    return next(
+        (
+            info["category_plural"]
+            for info in PEDESTRIAN_MODEL_INFO.values()
+            if info["category"] == category
+        ),
+        f"{category}s",
+    )
 
 
 def pedestrian_category(model: str) -> str:
     """Return the reporting category for any supported pedestrian model."""
-    if model in PEDESTRIAN_CATEGORY_BY_MODEL:
-        return PEDESTRIAN_CATEGORY_BY_MODEL[cast(PedestrianModel, model)]
+    if model in PEDESTRIAN_MODEL_INFO:
+        return PEDESTRIAN_MODEL_INFO[cast(PedestrianModel, model)]["category"]
     return model.replace("_", " ").title()
 
 
