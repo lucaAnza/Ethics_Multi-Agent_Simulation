@@ -10,9 +10,9 @@ from decision_engine import (
     DecisionEngineFactory,
     LLMDecisionEngine,
 )
-from ethics.config import CONSTANT, KANT, UTILITARIANISM, VIRTUE_ETHICS
+from ethics.utils.config import CONSTANT, KANT, UTILITARIANISM, VIRTUE_ETHICS
 from ethics.constant import ConstantFramework
-from ethics.factory import EthicalFrameworkFactory, create_ethical_framework
+from ethics.utils.factory import EthicalFrameworkFactory
 from ethics.kant import KantFramework
 from ethics.utilitarian import UtilitarianFramework
 from ethics.virtue import VirtueEthicsFramework
@@ -55,7 +55,7 @@ class FactoryMethodTests(unittest.TestCase):
                 self.assertIsInstance(framework, expected_type)
 
         first = EthicalFrameworkFactory.create(UTILITARIANISM)
-        second = create_ethical_framework(UTILITARIANISM)
+        second = EthicalFrameworkFactory.create(UTILITARIANISM)
         self.assertIsNot(first, second)
         self.assertIsNot(first.decision_history, second.decision_history)
 

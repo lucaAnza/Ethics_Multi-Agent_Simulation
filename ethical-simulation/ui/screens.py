@@ -11,7 +11,7 @@ import arcade
 import arcade.gui
 
 from decision_engine.modes import CODE_MODE, LLM_MODE
-from ethics.config import (
+from ethics.utils.config import (
     CONSTANT,
     FRAMEWORK_IMPLEMENTATIONS,
     FRAMEWORKS,

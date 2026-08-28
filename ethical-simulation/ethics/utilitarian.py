@@ -1,14 +1,14 @@
 """Utilitarian lane choice based only on visible entities."""
 
 from .base import DecisionContext, EthicalDecision, EthicalFramework, EntitySnapshot
-from .config import DEFAULT_ENTITIES_VALUES
-from .evaluation import choose_lower_cost, entity_cost, format_points
+from .utils.config import DEFAULT_ENTITIES_VALUES as _DEFAULT_ENTITIES_VALUES
+from .utils.evaluation import choose_lower_cost, entity_cost, format_points
 
 
 class UtilitarianFramework(EthicalFramework):
     def __init__(self, entity_values: dict[str, float] | None = None) -> None:
         super().__init__()
-        self.entity_values = dict(entity_values or DEFAULT_ENTITIES_VALUES)
+        self.entity_values = dict(entity_values or _DEFAULT_ENTITIES_VALUES)
 
     def update_entity_values(self, values: dict[str, float]) -> None:
         self.entity_values.update(values)

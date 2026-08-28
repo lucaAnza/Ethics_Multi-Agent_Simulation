@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from ethics.utilitarian import DEFAULT_ENTITIES_VALUES, UtilitarianFramework
+from ethics.utilitarian import UtilitarianFramework
+from ethics.utils.config import DEFAULT_ENTITIES_VALUES
 from simulation.engine import SimulationEngine
 from simulation.world import World
 

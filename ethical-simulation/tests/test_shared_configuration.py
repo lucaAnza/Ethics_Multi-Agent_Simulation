@@ -3,14 +3,13 @@ from __future__ import annotations
 import unittest
 
 from decision_engine.modes import CODE_MODE, IMPLEMENTATION_MODES, LLM_MODE
-from ethics.config import (
+from ethics.utils.config import (
     DEFAULT_ENTITIES_VALUES,
     FRAMEWORK_IMPLEMENTATIONS,
     FRAMEWORK_OPTIONS,
     FRAMEWORKS,
     LLM_FRAMEWORKS,
 )
-from ethics.utilitarian import DEFAULT_ENTITIES_VALUES as UTILITARIAN_DEFAULTS
 from llm.config import PROMPT_FILENAMES
 from scenarios import DEFAULT_SCENARIO_DEFINITIONS, DEFAULT_SCENARIO_NAME
 from scenarios.config import (
@@ -44,9 +43,8 @@ from simulation.world import World
 
 
 class SharedConfigurationTests(unittest.TestCase):
-    def test_compatibility_exports_reference_canonical_configuration(self) -> None:
+    def test_shared_exports_reference_canonical_configuration(self) -> None:
         self.assertIs(DEFAULT_SCENARIO_DEFINITIONS, CONFIG_SCENARIO_DEFINITIONS)
-        self.assertIs(DEFAULT_ENTITIES_VALUES, UTILITARIAN_DEFAULTS)
         self.assertEqual(
             VEHICLE_PIXELS_PER_SECOND_PER_KMH,
             EXPORTED_SPEED_FACTOR,

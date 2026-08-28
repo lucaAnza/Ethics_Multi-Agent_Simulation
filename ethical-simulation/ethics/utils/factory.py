@@ -7,7 +7,11 @@ from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any
 
-from .base import EthicalFramework
+from ..base import EthicalFramework
+from ..constant import UTILITARIAN_EVALUATION, ConstantFramework
+from ..kant import KantFramework
+from ..utilitarian import UtilitarianFramework
+from ..virtue import VirtueEthicsFramework
 from .config import (
     CONSTANT,
     DEFAULT_ENTITIES_VALUES,
@@ -15,11 +19,7 @@ from .config import (
     UTILITARIANISM,
     VIRTUE_ETHICS,
 )
-from .constant import UTILITARIAN_EVALUATION, ConstantFramework
-from .kant import KantFramework
 from .rules import DEFAULT_RULE_ENABLED, DEFAULT_RULE_ORDER
-from .utilitarian import UtilitarianFramework
-from .virtue import VirtueEthicsFramework
 
 
 class EthicalFrameworkCreator(ABC):
@@ -109,17 +109,3 @@ class EthicalFrameworkFactory:
             dict(utilitarian_values or DEFAULT_ENTITIES_VALUES)
         )
         return creator.create(settings, shared_values)
-
-
-def create_ethical_framework(
-    framework_name: str,
-    framework_settings: Mapping[str, Any] | None = None,
-    *,
-    utilitarian_values: Mapping[str, float] | None = None,
-) -> EthicalFramework:
-    """Compatibility wrapper around :class:`EthicalFrameworkFactory`."""
-    return EthicalFrameworkFactory.create(
-        framework_name,
-        framework_settings,
-        utilitarian_values=utilitarian_values,
-    )

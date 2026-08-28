@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .base import CHANGE_LANE, STAY, DecisionContext
+from ..base import CHANGE_LANE, STAY, DecisionContext
 
 
 DO_NOT_REDIRECT_HARM = "do_not_redirect_harm"

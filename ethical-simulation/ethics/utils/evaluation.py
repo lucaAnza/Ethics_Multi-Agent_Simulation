@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from .base import CHANGE_LANE, STAY, EntitySnapshot
+from ..base import CHANGE_LANE, STAY, EntitySnapshot
 
 
 def entity_cost(

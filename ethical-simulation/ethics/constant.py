@@ -4,10 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from .base import STAY, DecisionContext, EthicalDecision, EthicalFramework, EntitySnapshot
-from .config import DEFAULT_ENTITIES_VALUES
-from .evaluation import choose_lower_cost
-from .rules import (
+from .base import (
+    STAY,
+    DecisionContext,
+    EthicalDecision,
+    EthicalFramework,
+    EntitySnapshot,
+)
+from .utils.config import DEFAULT_ENTITIES_VALUES as _DEFAULT_ENTITIES_VALUES
+from .utils.evaluation import choose_lower_cost
+from .utils.rules import (
     DEFAULT_RULE_ENABLED,
     DEFAULT_RULE_ORDER,
     evaluate_rule,
@@ -33,7 +39,7 @@ class ConstantFramework(EthicalFramework):
             enabled_rules or DEFAULT_RULE_ENABLED
         )
         self.conflict_resolution = self._normalize_resolver(conflict_resolution)
-        self.entity_values = dict(entity_values or DEFAULT_ENTITIES_VALUES)
+        self.entity_values = dict(entity_values or _DEFAULT_ENTITIES_VALUES)
         self.moral_conflicts = 0
 
     @staticmethod

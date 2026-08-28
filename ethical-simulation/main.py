@@ -41,7 +41,7 @@ from ethics.constant import (
     UTILITARIAN_EVALUATION,
     ConstantFramework,
 )
-from ethics.config import (
+from ethics.utils.config import (
     CONSTANT,
     DEFAULT_ENTITIES_VALUES,
     DETERMINISTIC_FRAMEWORKS,
@@ -52,9 +52,9 @@ from ethics.config import (
     LLM_FRAMEWORKS,
     UTILITARIANISM,
 )
-from ethics.factory import EthicalFrameworkFactory
+from ethics.utils.factory import EthicalFrameworkFactory
 from ethics.kant import KantFramework
-from ethics.rules import DEFAULT_RULE_ENABLED, DEFAULT_RULE_ORDER, MORAL_RULES
+from ethics.utils.rules import DEFAULT_RULE_ENABLED, DEFAULT_RULE_ORDER, MORAL_RULES
 from scenarios import (
     DEFAULT_SCENARIO_NAME,
     RANDOM_SCENARIO_NAME,

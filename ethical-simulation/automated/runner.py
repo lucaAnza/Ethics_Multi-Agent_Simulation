@@ -16,7 +16,7 @@ from decision_engine import (
     DecisionEngineFactory,
     LLMDecisionEngine,
 )
-from ethics.factory import EthicalFrameworkFactory
+from ethics.utils.factory import EthicalFrameworkFactory
 from scenarios import RANDOM_SCENARIO_NAME
 from simulation.engine import SimulationEngine
 from simulation.statistics import (

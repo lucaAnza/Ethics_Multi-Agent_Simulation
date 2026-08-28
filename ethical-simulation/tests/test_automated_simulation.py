@@ -12,7 +12,7 @@ from automated import (
     BatchSimulationResult,
 )
 from decision_engine import LLMDecisionEngine
-from ethics.utilitarian import DEFAULT_ENTITIES_VALUES
+from ethics.utils.config import DEFAULT_ENTITIES_VALUES
 from llm.base_client import LLMClient
 from llm.prompt_builder import PromptBuilder
 from llm.schemas import LLMRawResponse, PromptPackage

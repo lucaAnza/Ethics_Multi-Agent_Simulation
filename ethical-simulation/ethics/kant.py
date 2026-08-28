@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
-from .base import STAY, DecisionContext, EthicalDecision, EthicalFramework, EntitySnapshot
-from .rules import (
+from .base import (
+    STAY,
+    DecisionContext,
+    EthicalDecision,
+    EthicalFramework,
+    EntitySnapshot,
+)
+from .utils.rules import (
     DEFAULT_RULE_ENABLED,
     DEFAULT_RULE_ORDER,
     MORAL_RULES,

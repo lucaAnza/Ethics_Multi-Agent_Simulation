@@ -59,18 +59,6 @@ class DecisionContext:
             lane_changes_remaining=max(0, int(lane_changes_remaining)),
         )
 
-    @property
-    def state(self) -> PerceptionState:
-        """Compatibility view used by the existing rule/evaluation helpers."""
-        return {
-            "current_lane_entities": [
-                dict(entity) for entity in self.current_lane_entities
-            ],
-            "other_lane_entities": [
-                dict(entity) for entity in self.other_lane_entities
-            ],
-        }
-
     def as_payload(self) -> dict[str, Any]:
         """Return the exact serializable context passed to an LLM provider."""
         return {

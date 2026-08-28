@@ -1,6 +1,6 @@
 """Static provider and prompt configuration for LLM decision engines."""
 
-from ethics.config import CONSTANT, KANT, UTILITARIANISM, VIRTUE_ETHICS
+from ethics.utils.config import CONSTANT, KANT, UTILITARIANISM, VIRTUE_ETHICS
 
 
 DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
@@ -12,4 +12,3 @@ PROMPT_FILENAMES = {
     CONSTANT: "constant.yaml",
     VIRTUE_ETHICS: "virtue_ethics.yaml",
 }
-
