@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from ..base import CHANGE_LANE, STAY, DecisionContext
+from simulation.entities import pedestrian_category
 
 
 
@@ -52,6 +53,39 @@ def _ignore_numerical_differences(context: DecisionContext) -> str | None:
 
     return STAY
 
+def _do_not_increase_harm(context: DecisionContext) -> str | None:
+    current_count = len(context.current_lane_entities)
+    other_count = len(context.other_lane_entities)
+
+    if other_count > current_count:
+        return STAY
+
+    return None
+
+def _always_protect_child(context: DecisionContext) -> str | None:
+    current_children = sum(
+        1
+        for entity in context.current_lane_entities
+        if pedestrian_category(str(entity.get("model", ""))) == "Child"
+    )
+
+    other_children = sum(
+        1
+        for entity in context.other_lane_entities
+        if pedestrian_category(str(entity.get("model", ""))) == "Child"
+    )
+
+    # Child only in current lane -> move away from the child
+    if current_children > 0 and other_children == 0:
+        return CHANGE_LANE
+
+    # Child only in other lane -> stay in current lane
+    if other_children > 0 and current_children == 0:
+        return STAY
+
+    # Children in both lanes, or no children:
+    # this rule alone cannot determine the action
+    return None
 
 def _prefer_stay_when_unresolved(context: DecisionContext) -> str | None:
     return STAY
@@ -79,6 +113,16 @@ MORAL_RULES = {
             key="prefer_stay_when_unresolved",
             label="Prefer STAY when unresolved",
             evaluator=_prefer_stay_when_unresolved,
+        ),
+        MoralRule(
+            key="do_not_increase_harm",
+            label="Do not increase harm",
+            evaluator=_do_not_increase_harm,
+        ),
+        MoralRule(
+            key="always_protect_child",
+            label="Always protect children",
+            evaluator=_always_protect_child,
         ),
     )
 }
@@ -123,6 +167,9 @@ def evaluate_rule(
     rule_key: str,
     context: DecisionContext,
 ) -> str | None:
+
+    print(context.current_lane_entities)
+    
     rule = MORAL_RULES.get(rule_key)
 
     if rule is None:

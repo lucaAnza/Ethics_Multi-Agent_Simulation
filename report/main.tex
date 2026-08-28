@@ -279,6 +279,9 @@ the ethical framework.
 \section{Ethical Frameworks}
 
 Four main ethical approaches are considered.
+This section briefly introduces each framework and its underlying idea.
+
+The detailed implementation of each framework is described in Section~\ref{sec:rule_based_agent}.
 
 % ------------------------------------------------
 \subsection{Utilitarianism}
@@ -339,7 +342,6 @@ Examples include:
 
 \begin{itemize}
     \item do not intentionally redirect harm;
-    \item do not use a person merely as a means;
     \item ignore personal categories;
     \item ignore numerical differences between lives.
 \end{itemize}
@@ -432,7 +434,7 @@ Kant (llm-agent)
 ...
 \end{verbatim}
 
-\subsection{Rule-Based Agent}
+\subsection{Rule-Based Agent} \label{sec:rule_based_agent}
 
 The rule-based agent implements the ethical frameworks directly in code
 and therefore produces decisions synchronously and deterministically.
@@ -460,11 +462,23 @@ The deterministic implementation differs according to the framework:
     entities in each lane is computed using the configured entity values.
     The lane with the lower casualty cost is selected. In case of equal
     costs, the vehicle remains in its current lane.
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=0.7\linewidth]{img/code_lower.png}
+        \caption{Part of utilitarianism engine implementation}
+        \label{fig:code_utilitarianism}
+    \end{figure}
 
     \item \textbf{Kant}: enabled moral rules are evaluated according to
     their configured priority. The first applicable rule determines the
     action. If no enabled rule resolves the situation, the default action
     is \texttt{STAY}.
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=0.7\linewidth]{img/code_rule.png}
+        \caption{Example of Kant rule solving}
+        \label{fig:code_kant}
+    \end{figure}
 
     \item \textbf{Constant}: all enabled moral rules are evaluated at the
     same priority level. If all applicable rules agree, their common action
@@ -472,6 +486,10 @@ The deterministic implementation differs according to the framework:
     configured utilitarian evaluation. If no rule applies, the default
     action is \texttt{STAY}.
 \end{itemize}
+
+
+
+
 
 The framework returns an \texttt{EthicalDecision} containing the
 recommended action, its explanation, and framework-specific metadata.

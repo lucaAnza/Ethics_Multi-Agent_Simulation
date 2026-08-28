@@ -41,20 +41,3 @@ The project aims to achieve the following objectives:
 This project explores the intersection of **software engineering, artificial intelligence, and ethics**, focusing on how _abstract moral principles_ can be translated into _computational decision rules_ and tested in dynamic environments.
 
 By combining a generated simulation environment with LLM-based agents, the project aims to investigate whether language models can consistently enact ethical principles in practice, rather than merely describe them in theory. The comparison between symbolic agents and LLM-based agents can help highlight the practical implications, strengths, and limitations of different approaches to ethical decision-making, especially in safety-critical domains such as autonomous systems.
-
-
-# IDEAS
-
-1. Unibo university in the background
-
-2. Sto facendo dei test su automated simulation. 
-Ho appena visto che nel report nel caso di code vs llm non c'è una comparazione effettiva ma c'è la somma dei due. puoi nella stessa schermata mettere entrambi?
-
-
-SCENARIO:
-
-1. One person cross the road not in the crossing line
-2. Family person vs 4 child
-3. A familiar and 20 child
-4. A familiar and 1 child
-5. 2 person in my line vs 1 person in the other
