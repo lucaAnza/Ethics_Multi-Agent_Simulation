@@ -200,13 +200,11 @@ would be available to the vehicle at decision time.
 
 \subsection{Decision Context}
 
-\todo {Update this section}
-
 Every ethical agent receives the same structured context:
 
 \begin{verbatim}
 DecisionContext(
-    position,
+    vehicle_position,
     current_lane_entities,
     other_lane_entities,
     lane_changes_remaining
@@ -338,12 +336,14 @@ achieving another objective.
 
 The Kantian implementation is based on configurable moral rules.
 
-Examples include:
+Examples of available rules include:
 
 \begin{itemize}
     \item do not intentionally redirect harm;
     \item ignore personal categories;
-    \item ignore numerical differences between lives.
+    \item ignore numerical differences between lives;
+    \item always protect children;
+    \item do not increase harm;
 \end{itemize}
 
 Unlike Utilitarianism, the rules are organised according to a
@@ -599,12 +599,17 @@ that produced it.
 \newpage
 \section{Experimental Evaluation}
 
-The experimental evaluation is designed to analyse both the internal
-consistency of each ethical framework and the differences that emerge
-when different ethical theories are applied to the same scenarios.
+\subsection{Experimental Setup}
 
-To ensure a fair comparison, paired experiments use the same scenarios,
-initial conditions and random seeds whenever possible. 
+The number of simulation runs depends on the type of experiment being performed.
+
+For experiments comparing the \textbf{Code} and \textbf{LLM-Agent} implementations, a maximum of \textbf{100 paired simulations} is executed. This limitation is mainly due to the API usage constraints and the significantly higher execution time associated with LLM requests.
+
+The LLM-based experiments use Google's \texttt{gemini-3.5-flash-lite} model \cite{gemini35flashlite}. The model was selected because it is designed for low-latency and high-throughput workloads, making it suitable for repeated decision requests within the simulation.
+
+In contrast, experiments involving only deterministic \textbf{Code agents} are executed for up to \textbf{100,000 simulations}. Since these agents operate locally and do not require external API calls, they can be evaluated much more efficiently and on a substantially larger number of scenarios.
+
+When Code and LLM implementations are compared, the same scenarios, initial conditions, and random seeds are used for both agents.
 
 % ------------------------------------------------
 \subsection{Internal Consistency: Code vs LLM}
@@ -627,6 +632,21 @@ The following experiments are performed:
 
     The experiment evaluates whether both implementations consistently
     protect the strongly weighted category.
+
+    For the strongly protected category experiment, the following Utilitarian
+    weights are used:
+    
+    \begin{center}
+    \begin{tabular}{lc}
+    \toprule
+    Category & Ethical weight \\
+    \midrule
+    Children & 85 \\
+    Adults   & 35 \\
+    Elderly  & 20 \\
+    \bottomrule
+    \end{tabular}
+    \end{center}
 
     \textit{Research question:}
     Does the LLM correctly reproduce the strong preference encoded by
@@ -914,6 +934,13 @@ Google AI for Developers.
 Aristotle,
 \textit{Nicomachean Ethics},
 trans. D. Ross, Oxford University Press, 2009.
+
+\bibitem{gemini35flashlite}
+Google,
+\textit{Gemini 3.5 Flash-Lite},
+Google AI for Developers, 2026.
+\url{https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite?hl=it}
+
 
 \end{thebibliography}
 

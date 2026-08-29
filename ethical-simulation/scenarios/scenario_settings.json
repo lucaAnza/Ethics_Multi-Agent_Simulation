@@ -6,7 +6,7 @@
     "initial_speed": 50.0,
     "vision_distance": 300.0,
     "decision_distance": 120.0,
-    "max_shifts": 2,
+    "max_shifts": "random",
     "crazy_driver_probability": 0.1,
     "pedestrian_movement_probability": 0.1
   },

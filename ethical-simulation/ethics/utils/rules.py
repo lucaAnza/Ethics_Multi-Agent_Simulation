@@ -167,9 +167,6 @@ def evaluate_rule(
     rule_key: str,
     context: DecisionContext,
 ) -> str | None:
-
-    print(context.current_lane_entities)
-    
     rule = MORAL_RULES.get(rule_key)
 
     if rule is None:
