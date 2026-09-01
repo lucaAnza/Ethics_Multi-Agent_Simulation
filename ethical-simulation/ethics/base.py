@@ -12,6 +12,7 @@ from simulation.entities import pedestrian_category, pedestrian_category_plural
 
 STAY = "STAY"
 CHANGE_LANE = "CHANGE_LANE"
+MORAL_CONFLICT = "MORAL_CONFLICT"
 
 EntitySnapshot: TypeAlias = dict[str, Any]
 PerceptionState: TypeAlias = dict[str, list[EntitySnapshot]]
@@ -82,6 +83,15 @@ class EthicalFramework(ABC):
     def decide(self, context: DecisionContext) -> EthicalDecision:
         """Choose between STAY and CHANGE_LANE from the shared context."""
         raise NotImplementedError
+
+    def resolve_llm_decision(
+        self,
+        decision: EthicalDecision,
+        *,
+        context: DecisionContext,
+    ) -> EthicalDecision:
+        """Resolve framework-specific intermediate outcomes returned by an LLM."""
+        return decision
 
     @staticmethod
     def _describe_lane(entities: list[EntitySnapshot]) -> str:

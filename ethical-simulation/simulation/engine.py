@@ -224,10 +224,14 @@ class SimulationEngine:
         if incident is None:
             self.phase = DRIVING
             return None
+        resolved_decision = self.framework.resolve_llm_decision(
+            result.decision,
+            context=result.context,
+        )
         return self._apply_decision(
             incident,
             result.context,
-            result.decision,
+            resolved_decision,
             llm_request=result.llm_request,
             llm_response=result.llm_response,
             llm_raw_response=result.llm_raw_response,

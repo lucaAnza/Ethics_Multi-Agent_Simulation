@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from .base import (
+    MORAL_CONFLICT,
     STAY,
     DecisionContext,
     EthicalDecision,
@@ -92,6 +93,43 @@ class ConstantFramework(EthicalFramework):
                 },
             )
 
+        votes_by_action = {
+            action: [rule_key for rule_key, vote in votes if vote == action]
+            for action in distinct_actions
+        }
+        return self._resolve_moral_conflict(
+            context,
+            details={"rule_votes": votes_by_action},
+        )
+
+    def resolve_llm_decision(
+        self,
+        decision: EthicalDecision,
+        *,
+        context: DecisionContext,
+    ) -> EthicalDecision:
+        """Run the configured resolver when the LLM reports rule conflict."""
+        if decision.action != MORAL_CONFLICT:
+            return decision
+
+        return self._resolve_moral_conflict(
+            context,
+            details={
+                **decision.details,
+                "llm_reported_conflict": True,
+                "llm_conflict_reason": decision.reason,
+            },
+            conflict_reason=decision.reason,
+        )
+
+    def _resolve_moral_conflict(
+        self,
+        context: DecisionContext,
+        *,
+        details: Mapping[str, object] | None = None,
+        conflict_reason: str | None = None,
+    ) -> EthicalDecision:
+        """Resolve a confirmed conflict without delegating the choice to the LLM."""
         current_entities = list(context.current_lane_entities)
         other_entities = list(context.other_lane_entities)
         action, current_cost, other_cost = choose_lower_cost(
@@ -99,20 +137,27 @@ class ConstantFramework(EthicalFramework):
             other_entities,
             self.entity_values,
         )
+        prefix = (
+            f"The LLM detected a moral conflict: {conflict_reason.strip()} "
+            if conflict_reason
+            else "Moral rules conflicted. "
+        )
         if current_cost == other_cost:
             reason = (
-                "Moral rules conflicted. Utilitarian evaluation was tied, "
-                "so STAY was selected."
+                f"{prefix}Utilitarian evaluation compared equal malus "
+                f"({current_cost:g} and {other_cost:g}), so STAY was selected."
             )
         else:
             reason = (
-                "Moral rules conflicted. Utilitarian evaluation selected "
-                "the lower malus."
+                f"{prefix}Utilitarian evaluation compared current-lane malus "
+                f"{current_cost:g} with other-lane malus {other_cost:g} and "
+                f"selected {action}."
             )
         return EthicalDecision(
             action,
             reason,
             {
+                **(details or {}),
                 "moral_conflict": True,
                 "conflict_resolver": self.conflict_resolution,
                 "current_lane_malus": current_cost,

@@ -6,7 +6,7 @@ import os
 
 from .base_client import LLMClient
 from .config import DEFAULT_GEMINI_MODEL, MINIMUM_GEMINI_TIMEOUT_SECONDS
-from .schemas import DECISION_JSON_SCHEMA, LLMRawResponse, PromptPackage
+from .schemas import LLMRawResponse, PromptPackage, decision_json_schema
 
 
 class GeminiClient(LLMClient):
@@ -62,7 +62,9 @@ class GeminiClient(LLMClient):
                     system_instruction=prompt.system_instruction,
                     temperature=0,
                     response_mime_type="application/json",
-                    response_json_schema=DECISION_JSON_SCHEMA,
+                    response_json_schema=decision_json_schema(
+                        prompt.allowed_actions
+                    ),
                     # The simulation never exposes callable tools. Explicitly
                     # disable the SDK default to avoid its AFC loop and warning.
                     automatic_function_calling=(

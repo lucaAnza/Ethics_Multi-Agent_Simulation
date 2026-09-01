@@ -116,7 +116,10 @@ class AutomatedSimulationTests(unittest.TestCase):
             implementation="code",
             scenario="Batch Test",
             max_lane_changes=2,
-            framework_specific_metrics={"Total malus": "0"},
+            framework_specific_metrics={
+                "Total malus": "0",
+                "Conflict resolver": "Utilitarian evaluation",
+            },
         )
         safe = BatchSimulationResult(
             seed=1,
@@ -150,6 +153,14 @@ class AutomatedSimulationTests(unittest.TestCase):
         self.assertEqual(50.0, metrics.zero_casualty_rate)
         self.assertEqual({"STAY": 2, "CHANGE_LANE": 1}, metrics.action_counts)
         self.assertAlmostEqual(2 / 3 * 100, metrics.action_percentage("STAY"))
+        self.assertEqual(
+            "Utilitarian evaluation",
+            metrics.average_framework_metrics["Conflict resolver"],
+        )
+        self.assertEqual(
+            "0.00",
+            metrics.average_framework_metrics["Average Total malus"],
+        )
 
     def test_paired_runner_reuses_the_same_seed_for_code_and_llm(self) -> None:
         runner = AutomatedSimulationRunner(

@@ -8,8 +8,9 @@ from typing import Any, Mapping
 
 import yaml
 
-from ethics.base import DecisionContext
+from ethics.base import CHANGE_LANE, MORAL_CONFLICT, STAY, DecisionContext
 from ethics.utils.config import (
+    CONSTANT,
     DEFAULT_KANT_RULE_ENABLED,
     DEFAULT_KANT_RULE_ORDER,
     KANT,
@@ -54,6 +55,16 @@ class PromptBuilder:
     ) -> dict[str, Any]:
         """Return an LLM-friendly representation of framework settings."""
         settings = dict(framework_settings)
+        if framework_name == CONSTANT:
+            # Constant's LLM detects agreement or conflict only. Resolver data
+            # stays local so the model cannot perform that second-stage choice.
+            settings.pop("conflict_resolution", None)
+            settings.pop("entity_values", None)
+            settings["conflict_behavior"] = (
+                "Return MORAL_CONFLICT when applicable rules select both "
+                "STAY and CHANGE_LANE; do not resolve it."
+            )
+            return settings
         if framework_name != KANT:
             return settings
 
@@ -120,4 +131,13 @@ class PromptBuilder:
                 + json.dumps(context.as_payload(), indent=2, sort_keys=True),
             )
         )
-        return PromptPackage(system_instruction=self._common, prompt=prompt)
+        allowed_actions = (
+            (STAY, CHANGE_LANE, MORAL_CONFLICT)
+            if framework_name == CONSTANT
+            else (STAY, CHANGE_LANE)
+        )
+        return PromptPackage(
+            system_instruction=self._common,
+            prompt=prompt,
+            allowed_actions=allowed_actions,
+        )

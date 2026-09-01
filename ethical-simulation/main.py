@@ -659,6 +659,8 @@ class SimulationWindow(arcade.Window):
             llm_request=event.llm_request,
             llm_response=event.llm_response,
             llm_raw_response=event.llm_raw_response,
+            latency_ms=event.applied_decision.details.get("latency_ms"),
+            attempts=event.applied_decision.details.get("attempts"),
         )
 
     def _framework_configuration(self, framework_name: str) -> dict:

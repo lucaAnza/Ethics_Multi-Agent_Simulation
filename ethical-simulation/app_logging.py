@@ -78,10 +78,16 @@ class SimulationFileLogger:
         llm_request: str | None,
         llm_response: str | None,
         llm_raw_response: str | None,
+        latency_ms: int | float | None = None,
+        attempts: int | None = None,
     ) -> None:
         request_text = llm_request if llm_request is not None else "N/A"
         parsed_response = llm_response if llm_response is not None else "N/A"
         model_text = model if model else "N/A"
+        latency_text = (
+            f"{latency_ms:g} ms" if isinstance(latency_ms, (int, float)) else "N/A"
+        )
+        attempts_text = str(attempts) if isinstance(attempts, int) else "N/A"
         (
             content_part_text,
             response_id,
@@ -97,6 +103,8 @@ class SimulationFileLogger:
             f"[ETHICAL DECISION] Framework: {framework}",
             f"  Implementation: {implementation}",
             f"  Model: {model_text}",
+            f"  Latency: {latency_text}",
+            f"  Attempts: {attempts_text}",
             f"  Current lane entities: {current_lane_count}",
             f"  Other lane entities: {other_lane_count}",
             f"  Framework action: {framework_action}",

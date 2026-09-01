@@ -2,6 +2,7 @@
 
 from .base import (
     CHANGE_LANE,
+    MORAL_CONFLICT,
     STAY,
     EthicalDecision,
     DecisionContext,
@@ -17,6 +18,7 @@ from .virtue import VirtueEthicsFramework
 
 __all__ = [
     "CHANGE_LANE",
+    "MORAL_CONFLICT",
     "STAY",
     "EthicalDecision",
     "DecisionContext",

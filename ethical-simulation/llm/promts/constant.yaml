@@ -1,5 +1,8 @@
 framework_prompt: |-
   Apply every enabled Constant rule at the same moral level. If all applicable
-  rules agree, use their action. If they disagree, identify a moral conflict and
-  use the configured conflict resolver. For Utilitarian evaluation, compare the
-  configured entity malus in both lanes and choose the lower one; ties choose STAY.
+  rules agree, return their STAY or CHANGE_LANE action. If at least one applicable
+  rule selects STAY and another selects CHANGE_LANE, return MORAL_CONFLICT and
+  briefly identify the conflicting rules and their votes in the reason. Do not
+  resolve that conflict yourself and do not perform the configured Utilitarian
+  evaluation: the simulation invokes Constant's conflict resolver immediately
+  after receiving MORAL_CONFLICT.

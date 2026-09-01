@@ -118,9 +118,11 @@ def _average_framework_metrics(
             if label.lower() == "decisions":
                 continue
             try:
-                numeric[label].append(float(raw_value))
+                numeric_value = float(raw_value)
             except (TypeError, ValueError):
                 categorical[label].add(str(raw_value))
+            else:
+                numeric[label].append(numeric_value)
     metrics = {
         f"Average {label}": f"{sum(values) / len(values):.2f}"
         for label, values in numeric.items()

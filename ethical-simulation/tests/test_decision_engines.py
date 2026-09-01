@@ -6,7 +6,14 @@ import time
 import unittest
 
 from decision_engine import CodeDecisionEngine, LLMDecisionEngine
-from ethics.base import CHANGE_LANE, STAY, DecisionContext
+from ethics.base import (
+    CHANGE_LANE,
+    MORAL_CONFLICT,
+    STAY,
+    DecisionContext,
+    EthicalDecision,
+)
+from ethics.constant import ConstantFramework
 from ethics.utilitarian import UtilitarianFramework
 from ethics.utils.config import (
     DO_NOT_REDIRECT_HARM,
@@ -158,6 +165,55 @@ class DecisionContractTests(unittest.TestCase):
         self.assertEqual(2, second_rule["priority"])
         self.assertEqual(IGNORE_PERSONAL_CATEGORIES, second_rule["key"])
         self.assertFalse(second_rule["enabled"])
+
+    def test_constant_llm_reports_conflict_for_local_resolution(self) -> None:
+        package = PromptBuilder().build(
+            framework_name="Constant",
+            framework_settings={
+                "enabled_rules": {},
+                "entity_values": {"boy": 30},
+                "conflict_resolution": "Utilitarian evaluation",
+            },
+            additional_instructions="",
+            context=decision_context(),
+        )
+
+        self.assertIn(MORAL_CONFLICT, package.allowed_actions)
+        self.assertIn("Do not\nresolve that conflict yourself", package.prompt)
+        settings_text = package.prompt.split(
+            "STRUCTURED FRAMEWORK SETTINGS\n",
+            maxsplit=1,
+        )[1].split("\n\nUSER ADDITIONAL INSTRUCTIONS", maxsplit=1)[0]
+        settings = json.loads(settings_text)
+        self.assertNotIn("entity_values", settings)
+        self.assertNotIn("conflict_resolution", settings)
+        self.assertIn("MORAL_CONFLICT", settings["conflict_behavior"])
+        decision = parse_decision(
+            '{"action":"MORAL_CONFLICT","reason":"Rules selected both actions."}',
+            allowed_actions=package.allowed_actions,
+        )
+        self.assertEqual(MORAL_CONFLICT, decision.action)
+
+    def test_constant_resolves_llm_conflict_with_configured_solver(self) -> None:
+        framework = ConstantFramework(entity_values={"boy": 30, "man": 10})
+        llm_decision = EthicalDecision(
+            MORAL_CONFLICT,
+            "One rule selected STAY and another selected CHANGE_LANE.",
+            {"mode": "llm-agent", "model": "fake-flash"},
+        )
+
+        decision = framework.resolve_llm_decision(
+            llm_decision,
+            context=decision_context(),
+        )
+
+        self.assertEqual(CHANGE_LANE, decision.action)
+        self.assertTrue(decision.details["moral_conflict"])
+        self.assertTrue(decision.details["llm_reported_conflict"])
+        self.assertEqual("llm-agent", decision.details["mode"])
+        self.assertEqual(30, decision.details["current_lane_malus"])
+        self.assertEqual(10, decision.details["other_lane_malus"])
+        self.assertIn("selected CHANGE_LANE", decision.reason)
 
 
 class AsyncLLMEngineTests(unittest.TestCase):

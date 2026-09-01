@@ -290,6 +290,12 @@ class AutomatedSimulationRunner:
                             llm_request=event.llm_request,
                             llm_response=event.llm_response,
                             llm_raw_response=event.llm_raw_response,
+                            latency_ms=event.applied_decision.details.get(
+                                "latency_ms"
+                            ),
+                            attempts=event.applied_decision.details.get(
+                                "attempts"
+                            ),
                         )
                 if engine.is_waiting_for_llm:
                     if not progress_waiting:

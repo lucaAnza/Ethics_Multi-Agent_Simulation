@@ -136,7 +136,10 @@ class LLMDecisionEngine:
                 attempt_raw_response = raw_response.response_for_log
                 last_response_text = attempt_response_text
                 last_raw_response = attempt_raw_response
-                parsed = parse_decision(raw_response.text)
+                parsed = parse_decision(
+                    raw_response.text,
+                    allowed_actions=prompt.allowed_actions,
+                )
                 latency_ms = int(round((monotonic() - started_at) * 1000))
                 decision = EthicalDecision(
                     action=parsed.action,

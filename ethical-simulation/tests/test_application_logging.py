@@ -24,6 +24,8 @@ class SimulationFileLoggerTests(unittest.TestCase):
                 lane_change_blocked=False,
                 llm_request="request body",
                 llm_response='{"action":"CHANGE_LANE"}',
+                latency_ms=1840,
+                attempts=1,
                 llm_raw_response=(
                     '{"candidates":[{"content":{"parts":['
                     '{"text":"raw body"}]}}],'
@@ -37,6 +39,8 @@ class SimulationFileLoggerTests(unittest.TestCase):
         self.assertIn("==================", content)
         self.assertIn("[ETHICAL DECISION] Framework: Utilitarianism", content)
         self.assertIn("  Model: gemini-test-model", content)
+        self.assertIn("  Latency: 1840 ms", content)
+        self.assertIn("  Attempts: 1", content)
         self.assertIn('- LLM-Request : "request body"', content)
         self.assertIn("[ORDERED DECISION]", content)
         self.assertIn("[RAW LLM EXCHANGE]", content)
@@ -74,6 +78,8 @@ class SimulationFileLoggerTests(unittest.TestCase):
 
         self.assertIn('- LLM-Request : "N/A"', content)
         self.assertIn("  Model: N/A", content)
+        self.assertIn("  Latency: N/A", content)
+        self.assertIn("  Attempts: N/A", content)
         self.assertIn('- content-part-text : "N/A"', content)
         self.assertIn('- response_id : "N/A"', content)
         self.assertIn('- prompt_token : "N/A"', content)
