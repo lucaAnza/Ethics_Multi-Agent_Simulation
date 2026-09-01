@@ -9,6 +9,16 @@ from typing import Any, Mapping
 import yaml
 
 from ethics.base import DecisionContext
+from ethics.utils.config import (
+    DEFAULT_KANT_RULE_ENABLED,
+    DEFAULT_KANT_RULE_ORDER,
+    KANT,
+)
+from ethics.utils.rules import (
+    MORAL_RULES,
+    normalize_enabled_rules,
+    normalize_rule_order,
+)
 from .config import PROMPT_FILENAMES
 from .schemas import PromptPackage
 
@@ -18,7 +28,7 @@ class PromptBuilder:
 
     def __init__(self, prompts_dir: Path | None = None) -> None:
         self.prompts_dir = prompts_dir or (
-            Path(__file__).resolve().parents[1] / "config" / "prompts"
+            Path(__file__).resolve().parent / "promts"
         )
         self._common = self._load_prompt("common.yaml", "system_prompt")
         self._framework_prompts = {
@@ -37,6 +47,49 @@ class PromptBuilder:
             raise RuntimeError(f"Prompt key {key!r} is missing from {path}")
         return value.strip()
 
+    @staticmethod
+    def _framework_settings_for_prompt(
+        framework_name: str,
+        framework_settings: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Return an LLM-friendly representation of framework settings."""
+        settings = dict(framework_settings)
+        if framework_name != KANT:
+            return settings
+
+        configured_order = settings.pop(
+            "rule_order",
+            DEFAULT_KANT_RULE_ORDER,
+        )
+        if not isinstance(configured_order, (list, tuple)):
+            configured_order = DEFAULT_KANT_RULE_ORDER
+        rule_order = normalize_rule_order(configured_order)
+
+        configured_enabled = settings.pop(
+            "enabled_rules",
+            DEFAULT_KANT_RULE_ENABLED,
+        )
+        if not isinstance(configured_enabled, Mapping):
+            configured_enabled = DEFAULT_KANT_RULE_ENABLED
+        enabled_rules = normalize_enabled_rules(
+            dict(configured_enabled),
+            DEFAULT_KANT_RULE_ENABLED,
+        )
+
+        settings["priority_convention"] = (
+            "1 is the highest priority; larger numbers have lower priority."
+        )
+        settings["rules_by_priority"] = [
+            {
+                "priority": priority,
+                "key": rule_key,
+                "label": MORAL_RULES[rule_key].label,
+                "enabled": enabled_rules[rule_key],
+            }
+            for priority, rule_key in enumerate(rule_order, start=1)
+        ]
+        return settings
+
     def build(
         self,
         *,
@@ -53,11 +106,15 @@ class PromptBuilder:
             ) from error
 
         custom = additional_instructions.strip() or "No additional instructions."
+        serialized_settings = self._framework_settings_for_prompt(
+            framework_name,
+            framework_settings,
+        )
         prompt = "\n\n".join(
             (
                 "FRAMEWORK PROMPT\n" + framework_prompt,
                 "STRUCTURED FRAMEWORK SETTINGS\n"
-                + json.dumps(framework_settings, indent=2, sort_keys=True),
+                + json.dumps(serialized_settings, indent=2, sort_keys=True),
                 "USER ADDITIONAL INSTRUCTIONS\n" + custom,
                 "CURRENT DECISION CONTEXT\n"
                 + json.dumps(context.as_payload(), indent=2, sort_keys=True),

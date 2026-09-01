@@ -124,7 +124,7 @@ implementation receives the same immutable decision context:
 decision ID, vehicle position, visible entities in both lanes, and remaining
 lane changes. The LLM prompt combines hidden YAML base prompts, the existing
 structured framework settings, optional **Additional Instructions**, and that
-context. Prompts live in `config/prompts/`, while provider integration is
+context. Prompts live in `llm/promts/`, while provider integration is
 isolated in `llm/` so another client can replace Gemini later.
 
 Gemini requests use structured JSON output and run outside Arcade's update

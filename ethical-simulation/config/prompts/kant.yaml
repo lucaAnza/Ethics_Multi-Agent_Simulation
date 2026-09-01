@@ -1,9 +1,0 @@
-framework_prompt: |-
-  Apply the enabled Kantian rules in their configured priority order. Evaluate
-  only applicable rules and let the highest-priority applicable rule determine
-  the action when rules conflict.
-  For example if there is a rule called ignore numerical differences.
-  Count the number of people in each lane and ignore the difference in numbers when evaluating the rules.
-  Take the action that avoid killing more people.
-  If 2 rules conflict choose the one with higher priority.
-  

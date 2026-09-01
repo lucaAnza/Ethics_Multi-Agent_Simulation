@@ -273,6 +273,7 @@ class AutomatedSimulationRunner:
                         application_logger.log_decision(
                             framework=event.framework_name,
                             implementation=event.implementation,
+                            model=event.applied_decision.details.get("model"),
                             current_lane_count=len(
                                 event.context.current_lane_entities
                             ),

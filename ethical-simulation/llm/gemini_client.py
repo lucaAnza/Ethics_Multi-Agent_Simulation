@@ -87,6 +87,6 @@ class GeminiClient(LLMClient):
             raw_response = repr(response)
         return LLMRawResponse(
             text=response_text,
-            model=self._model,
+            model=response.model_version or self._model,
             raw_response=raw_response,
         )

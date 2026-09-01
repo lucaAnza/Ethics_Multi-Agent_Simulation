@@ -15,6 +15,7 @@ class SimulationFileLoggerTests(unittest.TestCase):
             logger.log_decision(
                 framework="Utilitarianism",
                 implementation="llm-agent",
+                model="gemini-test-model",
                 current_lane_count=1,
                 other_lane_count=0,
                 framework_action="CHANGE_LANE",
@@ -35,6 +36,7 @@ class SimulationFileLoggerTests(unittest.TestCase):
 
         self.assertIn("==================", content)
         self.assertIn("[ETHICAL DECISION] Framework: Utilitarianism", content)
+        self.assertIn("  Model: gemini-test-model", content)
         self.assertIn('- LLM-Request : "request body"', content)
         self.assertIn("[ORDERED DECISION]", content)
         self.assertIn("[RAW LLM EXCHANGE]", content)
@@ -57,6 +59,7 @@ class SimulationFileLoggerTests(unittest.TestCase):
             logger.log_decision(
                 framework="Kant",
                 implementation="code",
+                model=None,
                 current_lane_count=1,
                 other_lane_count=1,
                 framework_action="STAY",
@@ -70,6 +73,7 @@ class SimulationFileLoggerTests(unittest.TestCase):
             content = log_path.read_text(encoding="utf-8")
 
         self.assertIn('- LLM-Request : "N/A"', content)
+        self.assertIn("  Model: N/A", content)
         self.assertIn('- content-part-text : "N/A"', content)
         self.assertIn('- response_id : "N/A"', content)
         self.assertIn('- prompt_token : "N/A"', content)

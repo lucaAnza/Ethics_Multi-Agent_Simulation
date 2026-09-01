@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import time
 import unittest
@@ -7,6 +8,10 @@ import unittest
 from decision_engine import CodeDecisionEngine, LLMDecisionEngine
 from ethics.base import CHANGE_LANE, STAY, DecisionContext
 from ethics.utilitarian import UtilitarianFramework
+from ethics.utils.config import (
+    DO_NOT_REDIRECT_HARM,
+    IGNORE_PERSONAL_CATEGORIES,
+)
 from ethics.virtue import VirtueEthicsFramework
 from llm.base_client import LLMClient
 from llm.errors import safe_error_message
@@ -82,7 +87,7 @@ class DecisionContractTests(unittest.TestCase):
         self.assertEqual("code", decision.details["mode"])
 
         prompts = PromptBuilder(
-            Path(__file__).resolve().parents[1] / "config" / "prompts"
+            Path(__file__).resolve().parents[1] / "llm" / "promts"
         )
         package = prompts.build(
             framework_name="Utilitarianism",
@@ -117,6 +122,42 @@ class DecisionContractTests(unittest.TestCase):
         )
         framework.record_decision(decision, context=context)
         self.assertEqual("STAY", framework.decision_history[0]["action"])
+
+    def test_kant_prompt_numbers_rules_by_priority(self) -> None:
+        package = PromptBuilder().build(
+            framework_name="Kant",
+            framework_settings={
+                "rule_order": [
+                    DO_NOT_REDIRECT_HARM,
+                    IGNORE_PERSONAL_CATEGORIES,
+                ],
+                "enabled_rules": {
+                    DO_NOT_REDIRECT_HARM: True,
+                    IGNORE_PERSONAL_CATEGORIES: False,
+                },
+            },
+            additional_instructions="",
+            context=decision_context(),
+        )
+        settings_text = package.prompt.split(
+            "STRUCTURED FRAMEWORK SETTINGS\n",
+            maxsplit=1,
+        )[1].split("\n\nUSER ADDITIONAL INSTRUCTIONS", maxsplit=1)[0]
+        settings = json.loads(settings_text)
+
+        self.assertNotIn("rule_order", settings)
+        self.assertNotIn("enabled_rules", settings)
+        self.assertEqual(
+            "1 is the highest priority; larger numbers have lower priority.",
+            settings["priority_convention"],
+        )
+        first_rule, second_rule = settings["rules_by_priority"][:2]
+        self.assertEqual(1, first_rule["priority"])
+        self.assertEqual(DO_NOT_REDIRECT_HARM, first_rule["key"])
+        self.assertTrue(first_rule["enabled"])
+        self.assertEqual(2, second_rule["priority"])
+        self.assertEqual(IGNORE_PERSONAL_CATEGORIES, second_rule["key"])
+        self.assertFalse(second_rule["enabled"])
 
 
 class AsyncLLMEngineTests(unittest.TestCase):

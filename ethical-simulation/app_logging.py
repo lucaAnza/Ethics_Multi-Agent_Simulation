@@ -68,6 +68,7 @@ class SimulationFileLogger:
         *,
         framework: str,
         implementation: str,
+        model: str | None,
         current_lane_count: int,
         other_lane_count: int,
         framework_action: str,
@@ -80,6 +81,7 @@ class SimulationFileLogger:
     ) -> None:
         request_text = llm_request if llm_request is not None else "N/A"
         parsed_response = llm_response if llm_response is not None else "N/A"
+        model_text = model if model else "N/A"
         (
             content_part_text,
             response_id,
@@ -94,6 +96,7 @@ class SimulationFileLogger:
             "[ORDERED DECISION]",
             f"[ETHICAL DECISION] Framework: {framework}",
             f"  Implementation: {implementation}",
+            f"  Model: {model_text}",
             f"  Current lane entities: {current_lane_count}",
             f"  Other lane entities: {other_lane_count}",
             f"  Framework action: {framework_action}",

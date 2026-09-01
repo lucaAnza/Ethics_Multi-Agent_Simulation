@@ -3,7 +3,7 @@
 from ethics.utils.config import CONSTANT, KANT, UTILITARIANISM, VIRTUE_ETHICS
 
 
-DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite" # gemini-3.6-flash (powerfull model , more expensive)
 MINIMUM_GEMINI_TIMEOUT_SECONDS = 10.0
 
 PROMPT_FILENAMES = {
