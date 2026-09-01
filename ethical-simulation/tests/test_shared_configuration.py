@@ -5,12 +5,18 @@ from typing import get_args
 
 from decision_engine.modes import CODE_MODE, IMPLEMENTATION_MODES, LLM_MODE
 from ethics.utils.config import (
+    DEFAULT_CONSTANT_RULE_ENABLED,
+    DEFAULT_CONSTANT_RULE_ORDER,
     DEFAULT_ENTITIES_VALUES,
+    DEFAULT_KANT_RULE_ENABLED,
+    DEFAULT_KANT_RULE_ORDER,
     FRAMEWORK_IMPLEMENTATIONS,
     FRAMEWORK_OPTIONS,
     FRAMEWORKS,
     LLM_FRAMEWORKS,
+    MORAL_RULE_KEYS,
 )
+from ethics.utils.rules import MORAL_RULES
 from llm.config import PROMPT_FILENAMES
 from scenarios import DEFAULT_SCENARIO_DEFINITIONS, DEFAULT_SCENARIO_NAME
 from scenarios.config import (
@@ -97,6 +103,19 @@ class SharedConfigurationTests(unittest.TestCase):
                 for implementation in implementations
             },
             set(FRAMEWORK_OPTIONS),
+        )
+
+    def test_framework_rule_defaults_use_the_canonical_config_order(self) -> None:
+        self.assertEqual(MORAL_RULE_KEYS, DEFAULT_KANT_RULE_ORDER)
+        self.assertEqual(MORAL_RULE_KEYS, DEFAULT_CONSTANT_RULE_ORDER)
+        self.assertEqual(set(MORAL_RULE_KEYS), set(MORAL_RULES))
+        self.assertEqual(
+            set(MORAL_RULE_KEYS),
+            set(DEFAULT_KANT_RULE_ENABLED),
+        )
+        self.assertEqual(
+            set(MORAL_RULE_KEYS),
+            set(DEFAULT_CONSTANT_RULE_ENABLED),
         )
 
     def test_entity_and_world_defaults_come_from_simulation_config(self) -> None:

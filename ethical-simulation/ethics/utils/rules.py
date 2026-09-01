@@ -4,13 +4,24 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+
 from ..base import CHANGE_LANE, STAY, DecisionContext
+from .config import (
+    ALWAYS_PROTECT_CHILD,
+    DEFAULT_KANT_RULE_ORDER,
+    DO_NOT_INCREASE_HARM,
+    DO_NOT_REDIRECT_HARM,
+    IGNORE_NUMERICAL_DIFFERENCES,
+    IGNORE_PERSONAL_CATEGORIES,
+    MORAL_RULE_KEYS,
+    PREFER_STAY_WHEN_UNRESOLVED,
+)
 from simulation.entities import pedestrian_category
 
 
-
-########## RULES DEFINITION AND EVALUATION ##########
 RuleEvaluator = Callable[[DecisionContext], str | None]
+
+
 @dataclass(frozen=True)
 class MoralRule:
     key: str
@@ -53,6 +64,7 @@ def _ignore_numerical_differences(context: DecisionContext) -> str | None:
 
     return STAY
 
+
 def _do_not_increase_harm(context: DecisionContext) -> str | None:
     current_count = len(context.current_lane_entities)
     other_count = len(context.other_lane_entities)
@@ -61,6 +73,7 @@ def _do_not_increase_harm(context: DecisionContext) -> str | None:
         return STAY
 
     return None
+
 
 def _always_protect_child(context: DecisionContext) -> str | None:
     current_children = sum(
@@ -87,6 +100,7 @@ def _always_protect_child(context: DecisionContext) -> str | None:
     # this rule alone cannot determine the action
     return None
 
+
 def _prefer_stay_when_unresolved(context: DecisionContext) -> str | None:
     return STAY
 
@@ -95,44 +109,36 @@ MORAL_RULES = {
     rule.key: rule
     for rule in (
         MoralRule(
-            key="do_not_redirect_harm",
+            key=DO_NOT_REDIRECT_HARM,
             label="Do not intentionally redirect harm",
             evaluator=_do_not_redirect_harm,
         ),
         MoralRule(
-            key="ignore_personal_categories",
+            key=IGNORE_PERSONAL_CATEGORIES,
             label="Ignore personal categories",
             evaluator=_ignore_personal_categories,
         ),
         MoralRule(
-            key="ignore_numerical_differences",
+            key=IGNORE_NUMERICAL_DIFFERENCES,
             label="Ignore numerical differences between lives",
             evaluator=_ignore_numerical_differences,
         ),
         MoralRule(
-            key="prefer_stay_when_unresolved",
+            key=PREFER_STAY_WHEN_UNRESOLVED,
             label="Prefer STAY when unresolved",
             evaluator=_prefer_stay_when_unresolved,
         ),
         MoralRule(
-            key="do_not_increase_harm",
+            key=DO_NOT_INCREASE_HARM,
             label="Do not increase harm",
             evaluator=_do_not_increase_harm,
         ),
         MoralRule(
-            key="always_protect_child",
+            key=ALWAYS_PROTECT_CHILD,
             label="Always protect children",
             evaluator=_always_protect_child,
         ),
     )
-}
-# ###################################################à
-
-
-DEFAULT_RULE_ORDER = tuple(MORAL_RULES)
-DEFAULT_RULE_ENABLED = {
-    rule_key: True
-    for rule_key in DEFAULT_RULE_ORDER
 }
 
 
@@ -147,7 +153,7 @@ def normalize_rule_order(
 
     normalized.extend(
         rule_key
-        for rule_key in DEFAULT_RULE_ORDER
+        for rule_key in DEFAULT_KANT_RULE_ORDER
         if rule_key not in normalized
     )
 
@@ -156,10 +162,16 @@ def normalize_rule_order(
 
 def normalize_enabled_rules(
     enabled_rules: dict[str, bool],
+    default_enabled_rules: dict[str, bool],
 ) -> dict[str, bool]:
     return {
-        rule_key: bool(enabled_rules.get(rule_key, True))
-        for rule_key in DEFAULT_RULE_ORDER
+        rule_key: bool(
+            enabled_rules.get(
+                rule_key,
+                default_enabled_rules.get(rule_key, True),
+            )
+        )
+        for rule_key in MORAL_RULE_KEYS
     }
 
 

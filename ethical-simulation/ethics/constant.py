@@ -11,11 +11,13 @@ from .base import (
     EthicalFramework,
     EntitySnapshot,
 )
-from .utils.config import DEFAULT_ENTITIES_VALUES as _DEFAULT_ENTITIES_VALUES
+from .utils.config import (
+    DEFAULT_CONSTANT_RULE_ENABLED,
+    DEFAULT_CONSTANT_RULE_ORDER,
+    DEFAULT_ENTITIES_VALUES as _DEFAULT_ENTITIES_VALUES,
+)
 from .utils.evaluation import choose_lower_cost
 from .utils.rules import (
-    DEFAULT_RULE_ENABLED,
-    DEFAULT_RULE_ORDER,
     evaluate_rule,
     normalize_enabled_rules,
 )
@@ -36,7 +38,8 @@ class ConstantFramework(EthicalFramework):
     ) -> None:
         super().__init__()
         self.enabled_rules = normalize_enabled_rules(
-            enabled_rules or DEFAULT_RULE_ENABLED
+            enabled_rules or DEFAULT_CONSTANT_RULE_ENABLED,
+            DEFAULT_CONSTANT_RULE_ENABLED,
         )
         self.conflict_resolution = self._normalize_resolver(conflict_resolution)
         self.entity_values = dict(entity_values or _DEFAULT_ENTITIES_VALUES)
@@ -52,7 +55,10 @@ class ConstantFramework(EthicalFramework):
         conflict_resolution: str,
     ) -> None:
         """Replace rule switches and resolver without affecting history."""
-        self.enabled_rules = normalize_enabled_rules(enabled_rules)
+        self.enabled_rules = normalize_enabled_rules(
+            enabled_rules,
+            DEFAULT_CONSTANT_RULE_ENABLED,
+        )
         self.conflict_resolution = self._normalize_resolver(conflict_resolution)
 
     def update_entity_values(self, values: Mapping[str, float]) -> None:
@@ -62,7 +68,7 @@ class ConstantFramework(EthicalFramework):
     def decide(self, context: DecisionContext) -> EthicalDecision:
         votes = [
             (rule_key, action)
-            for rule_key in DEFAULT_RULE_ORDER
+            for rule_key in DEFAULT_CONSTANT_RULE_ORDER
             if self.enabled_rules[rule_key]
             if (action := evaluate_rule(rule_key, context)) is not None
         ]

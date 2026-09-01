@@ -9,9 +9,11 @@ from .base import (
     EthicalFramework,
     EntitySnapshot,
 )
+from .utils.config import (
+    DEFAULT_KANT_RULE_ENABLED,
+    DEFAULT_KANT_RULE_ORDER,
+)
 from .utils.rules import (
-    DEFAULT_RULE_ENABLED,
-    DEFAULT_RULE_ORDER,
     MORAL_RULES,
     evaluate_rule,
     normalize_enabled_rules,
@@ -24,13 +26,14 @@ class KantFramework(EthicalFramework):
 
     def __init__(
         self,
-        rule_order: list[str] | tuple[str, ...] = DEFAULT_RULE_ORDER,
+        rule_order: list[str] | tuple[str, ...] = DEFAULT_KANT_RULE_ORDER,
         enabled_rules: dict[str, bool] | None = None,
     ) -> None:
         super().__init__()
         self.rule_order = normalize_rule_order(rule_order)
         self.enabled_rules = normalize_enabled_rules(
-            enabled_rules or DEFAULT_RULE_ENABLED
+            enabled_rules or DEFAULT_KANT_RULE_ENABLED,
+            DEFAULT_KANT_RULE_ENABLED,
         )
 
     def configure_rules(
@@ -40,7 +43,10 @@ class KantFramework(EthicalFramework):
     ) -> None:
         """Replace the hierarchy and enabled state without affecting history."""
         self.rule_order = normalize_rule_order(rule_order)
-        self.enabled_rules = normalize_enabled_rules(enabled_rules)
+        self.enabled_rules = normalize_enabled_rules(
+            enabled_rules,
+            DEFAULT_KANT_RULE_ENABLED,
+        )
 
     def decide(self, context: DecisionContext) -> EthicalDecision:
         for rule_key in self.rule_order:

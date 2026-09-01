@@ -14,12 +14,14 @@ from ..utilitarian import UtilitarianFramework
 from ..virtue import VirtueEthicsFramework
 from .config import (
     CONSTANT,
+    DEFAULT_CONSTANT_RULE_ENABLED,
     DEFAULT_ENTITIES_VALUES,
+    DEFAULT_KANT_RULE_ENABLED,
+    DEFAULT_KANT_RULE_ORDER,
     KANT,
     UTILITARIANISM,
     VIRTUE_ETHICS,
 )
-from .rules import DEFAULT_RULE_ENABLED, DEFAULT_RULE_ORDER
 
 
 class EthicalFrameworkCreator(ABC):
@@ -51,8 +53,11 @@ class KantFrameworkCreator(EthicalFrameworkCreator):
         _utilitarian_values: Mapping[str, float],
     ) -> EthicalFramework:
         return KantFramework(
-            rule_order=settings.get("rule_order", DEFAULT_RULE_ORDER),
-            enabled_rules=settings.get("enabled_rules", DEFAULT_RULE_ENABLED),
+            rule_order=settings.get("rule_order", DEFAULT_KANT_RULE_ORDER),
+            enabled_rules=settings.get(
+                "enabled_rules",
+                DEFAULT_KANT_RULE_ENABLED,
+            ),
         )
 
 
@@ -63,7 +68,10 @@ class ConstantFrameworkCreator(EthicalFrameworkCreator):
         utilitarian_values: Mapping[str, float],
     ) -> EthicalFramework:
         return ConstantFramework(
-            enabled_rules=settings.get("enabled_rules", DEFAULT_RULE_ENABLED),
+            enabled_rules=settings.get(
+                "enabled_rules",
+                DEFAULT_CONSTANT_RULE_ENABLED,
+            ),
             conflict_resolution=settings.get(
                 "conflict_resolution",
                 UTILITARIAN_EVALUATION,

@@ -43,7 +43,11 @@ from ethics.constant import (
 )
 from ethics.utils.config import (
     CONSTANT,
+    DEFAULT_CONSTANT_RULE_ENABLED,
+    DEFAULT_CONSTANT_RULE_ORDER,
     DEFAULT_ENTITIES_VALUES,
+    DEFAULT_KANT_RULE_ENABLED,
+    DEFAULT_KANT_RULE_ORDER,
     DETERMINISTIC_FRAMEWORKS,
     FRAMEWORK_IMPLEMENTATIONS,
     FRAMEWORK_OPTIONS,
@@ -54,7 +58,7 @@ from ethics.utils.config import (
 )
 from ethics.utils.factory import EthicalFrameworkFactory
 from ethics.kant import KantFramework
-from ethics.utils.rules import DEFAULT_RULE_ENABLED, DEFAULT_RULE_ORDER, MORAL_RULES
+from ethics.utils.rules import MORAL_RULES
 from scenarios import (
     DEFAULT_SCENARIO_NAME,
     RANDOM_SCENARIO_NAME,
@@ -182,11 +186,11 @@ class SimulationWindow(arcade.Window):
         self.framework_settings = {
             UTILITARIANISM: dict(DEFAULT_ENTITIES_VALUES),
             KANT: {
-                "rule_order": list(DEFAULT_RULE_ORDER),
-                "enabled_rules": dict(DEFAULT_RULE_ENABLED),
+                "rule_order": list(DEFAULT_KANT_RULE_ORDER),
+                "enabled_rules": dict(DEFAULT_KANT_RULE_ENABLED),
             },
             CONSTANT: {
-                "enabled_rules": dict(DEFAULT_RULE_ENABLED),
+                "enabled_rules": dict(DEFAULT_CONSTANT_RULE_ENABLED),
                 "conflict_resolution": UTILITARIAN_EVALUATION,
             },
         }
@@ -924,7 +928,7 @@ class SimulationWindow(arcade.Window):
         rule_order = (
             settings["rule_order"]
             if framework_name == KANT
-            else list(DEFAULT_RULE_ORDER)
+            else list(DEFAULT_CONSTANT_RULE_ORDER)
         )
         enabled_rules = settings["enabled_rules"]
         return [
