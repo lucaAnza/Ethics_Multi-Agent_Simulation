@@ -32,6 +32,7 @@ class DecisionEngineResult:
     decision: EthicalDecision
     llm_request: str
     llm_response: str
+    llm_raw_response: str
 
 
 class CodeDecisionEngine:
@@ -120,17 +121,21 @@ class LLMDecisionEngine:
     ) -> DecisionEngineResult:
         started_at = monotonic()
         last_error = "Unknown LLM error"
-        last_response = ""
+        last_response_text = ""
+        last_raw_response = ""
         request_log = self._format_request_for_log(prompt)
         for attempt in range(1, self.max_attempts + 1):
-            attempt_response = ""
+            attempt_response_text = ""
+            attempt_raw_response = ""
             try:
                 raw_response = self.client.generate(
                     prompt,
                     timeout_seconds=self.timeout_seconds,
                 )
-                attempt_response = raw_response.text
-                last_response = attempt_response
+                attempt_response_text = raw_response.text
+                attempt_raw_response = raw_response.response_for_log
+                last_response_text = attempt_response_text
+                last_raw_response = attempt_raw_response
                 parsed = parse_decision(raw_response.text)
                 latency_ms = int(round((monotonic() - started_at) * 1000))
                 decision = EthicalDecision(
@@ -150,10 +155,16 @@ class LLMDecisionEngine:
                     decision,
                     request_log,
                     raw_response.text,
+                    raw_response.response_for_log,
                 )
             except Exception as error:  # Provider/timeout/parser boundary.
                 last_error = safe_error_message(error)
-                last_response = attempt_response or f"ERROR: {last_error}"
+                last_response_text = (
+                    attempt_response_text or f"ERROR: {last_error}"
+                )
+                last_raw_response = (
+                    attempt_raw_response or last_response_text
+                )
 
         latency_ms = int(round((monotonic() - started_at) * 1000))
         return self._fallback_result(
@@ -163,7 +174,8 @@ class LLMDecisionEngine:
             attempts=self.max_attempts,
             error=last_error,
             request_log=request_log,
-            response_log=last_response,
+            response_text_log=last_response_text,
+            raw_response_log=last_raw_response,
         )
 
     @staticmethod
@@ -183,7 +195,8 @@ class LLMDecisionEngine:
         attempts: int,
         error: str,
         request_log: str,
-        response_log: str,
+        response_text_log: str,
+        raw_response_log: str,
     ) -> DecisionEngineResult:
         return DecisionEngineResult(
             framework_name,
@@ -204,7 +217,8 @@ class LLMDecisionEngine:
                 },
             ),
             request_log,
-            response_log or f"ERROR: {safe_error_message(error)}",
+            response_text_log or f"ERROR: {safe_error_message(error)}",
+            raw_response_log or f"ERROR: {safe_error_message(error)}",
         )
 
     def poll(self) -> DecisionEngineResult | None:
@@ -230,7 +244,8 @@ class LLMDecisionEngine:
                     attempts=self.max_attempts,
                     error=str(error) or type(error).__name__,
                     request_log=self._pending_request,
-                    response_log=f"ERROR: {safe_error_message(error)}",
+                    response_text_log=f"ERROR: {safe_error_message(error)}",
+                    raw_response_log=f"ERROR: {safe_error_message(error)}",
                 )
         else:
             future.cancel()
@@ -243,7 +258,12 @@ class LLMDecisionEngine:
                 attempts=self.max_attempts,
                 error="Decision request exceeded the timeout budget",
                 request_log=self._pending_request,
-                response_log="ERROR: Decision request exceeded the timeout budget",
+                response_text_log=(
+                    "ERROR: Decision request exceeded the timeout budget"
+                ),
+                raw_response_log=(
+                    "ERROR: Decision request exceeded the timeout budget"
+                ),
             )
 
         self._future = None

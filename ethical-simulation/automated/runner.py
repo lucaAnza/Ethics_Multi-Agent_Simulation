@@ -288,6 +288,7 @@ class AutomatedSimulationRunner:
                             ),
                             llm_request=event.llm_request,
                             llm_response=event.llm_response,
+                            llm_raw_response=event.llm_raw_response,
                         )
                 if engine.is_waiting_for_llm:
                     if not progress_waiting:

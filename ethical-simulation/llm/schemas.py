@@ -32,7 +32,13 @@ class PromptPackage:
 
 @dataclass(frozen=True)
 class LLMRawResponse:
-    """Minimal response contract implemented by every provider adapter."""
+    """Provider response with both parser input and complete raw payload."""
 
     text: str
     model: str
+    raw_response: str | None = None
+
+    @property
+    def response_for_log(self) -> str:
+        """Return the richest provider representation available."""
+        return self.raw_response if self.raw_response is not None else self.text

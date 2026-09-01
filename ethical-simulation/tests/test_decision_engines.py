@@ -34,7 +34,11 @@ class FakeClient(LLMClient):
         response = self.responses.pop(0)
         if isinstance(response, Exception):
             raise response
-        return LLMRawResponse(text=response, model=self.model_name)
+        return LLMRawResponse(
+            text=response,
+            model=self.model_name,
+            raw_response=f"RAW PROVIDER RESPONSE: {response}",
+        )
 
 
 def decision_context() -> DecisionContext:
@@ -153,6 +157,7 @@ class AsyncLLMEngineTests(unittest.TestCase):
         self.assertFalse(result.decision.details["fallback"])
         self.assertIn("SYSTEM INSTRUCTION", result.llm_request)
         self.assertIn('"action":"STAY"', result.llm_response)
+        self.assertIn("RAW PROVIDER RESPONSE", result.llm_raw_response)
 
     def test_errors_fall_back_to_stay_and_are_recorded(self) -> None:
         client = FakeClient([RuntimeError("offline"), RuntimeError("offline")])

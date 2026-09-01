@@ -22,14 +22,32 @@ class SimulationFileLoggerTests(unittest.TestCase):
                 reason="The other lane has lower malus.",
                 lane_change_blocked=False,
                 llm_request="request body",
-                llm_response="response body",
+                llm_response='{"action":"CHANGE_LANE"}',
+                llm_raw_response=(
+                    '{"candidates":[{"content":{"parts":['
+                    '{"text":"raw body"}]}}],'
+                    '"response_id":"response-123",'
+                    '"usage_metadata":{"prompt_token_count":20,'
+                    '"candidates_token_count":5,"total_token_count":25}}'
+                ),
             )
             content = log_path.read_text(encoding="utf-8")
 
         self.assertIn("==================", content)
         self.assertIn("[ETHICAL DECISION] Framework: Utilitarianism", content)
         self.assertIn('- LLM-Request : "request body"', content)
-        self.assertIn('- LLM-Respond : "response body"', content)
+        self.assertIn("[ORDERED DECISION]", content)
+        self.assertIn("[RAW LLM EXCHANGE]", content)
+        self.assertIn('- content-part-text : "raw body"', content)
+        self.assertIn('- response_id : "response-123"', content)
+        self.assertIn('- prompt_token : "20"', content)
+        self.assertIn('- answer_token : "5"', content)
+        self.assertIn('- total-token : "25"', content)
+        self.assertIn(
+            '- LLM-Respond (parsed text) : "{\"action\":\"CHANGE_LANE\"}"',
+            content,
+        )
+        self.assertNotIn("LLM-Respond (raw)", content)
         self.assertIn("============================================", content)
 
     def test_code_decision_uses_na_for_llm_fields(self) -> None:
@@ -47,10 +65,17 @@ class SimulationFileLoggerTests(unittest.TestCase):
                 lane_change_blocked=False,
                 llm_request=None,
                 llm_response=None,
+                llm_raw_response=None,
             )
             content = log_path.read_text(encoding="utf-8")
 
-        self.assertEqual(2, content.count('"N/A"'))
+        self.assertIn('- LLM-Request : "N/A"', content)
+        self.assertIn('- content-part-text : "N/A"', content)
+        self.assertIn('- response_id : "N/A"', content)
+        self.assertIn('- prompt_token : "N/A"', content)
+        self.assertIn('- answer_token : "N/A"', content)
+        self.assertIn('- total-token : "N/A"', content)
+        self.assertIn('- LLM-Respond (parsed text) : "N/A"', content)
 
 
 if __name__ == "__main__":

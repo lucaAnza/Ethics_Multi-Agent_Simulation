@@ -8,6 +8,7 @@ from .base_client import LLMClient
 from .config import DEFAULT_GEMINI_MODEL, MINIMUM_GEMINI_TIMEOUT_SECONDS
 from .schemas import DECISION_JSON_SCHEMA, LLMRawResponse, PromptPackage
 
+
 class GeminiClient(LLMClient):
     """Structured-output client backed by the official ``google-genai`` SDK."""
 
@@ -75,4 +76,17 @@ class GeminiClient(LLMClient):
         response_text = response.text
         if not response_text:
             raise RuntimeError("Gemini returned an empty response")
-        return LLMRawResponse(text=response_text, model=self._model)
+        try:
+            raw_response = response.model_dump_json(
+                indent=2,
+                fallback=str,
+            )
+        except Exception:
+            # Preserve the provider result even if a future SDK version adds a
+            # field that its Pydantic serializer cannot encode.
+            raw_response = repr(response)
+        return LLMRawResponse(
+            text=response_text,
+            model=self._model,
+            raw_response=raw_response,
+        )

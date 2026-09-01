@@ -657,6 +657,7 @@ class SimulationWindow(arcade.Window):
             ),
             llm_request=event.llm_request,
             llm_response=event.llm_response,
+            llm_raw_response=event.llm_raw_response,
         )
 
     def _framework_configuration(self, framework_name: str) -> dict:

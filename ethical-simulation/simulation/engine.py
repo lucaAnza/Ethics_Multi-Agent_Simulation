@@ -38,6 +38,7 @@ class SimulationDecisionEvent:
     lane_change_started: bool
     llm_request: str | None = None
     llm_response: str | None = None
+    llm_raw_response: str | None = None
 
 
 @dataclass(frozen=True)
@@ -157,6 +158,9 @@ class SimulationEngine:
                     self._llm_start_fallback("LLM decision engine is unavailable"),
                     llm_request="Unable to build the LLM request.",
                     llm_response="ERROR: LLM decision engine is unavailable",
+                    llm_raw_response=(
+                        "ERROR: LLM decision engine is unavailable"
+                    ),
                 )
             try:
                 started = self.llm_decision_engine.submit(
@@ -179,6 +183,7 @@ class SimulationEngine:
                         f"Unable to build {self.framework_name} LLM request."
                     ),
                     llm_response=f"ERROR: {message}",
+                    llm_raw_response=f"ERROR: {message}",
                 )
             if started:
                 self.pending_world_context = incident
@@ -225,6 +230,7 @@ class SimulationEngine:
             result.decision,
             llm_request=result.llm_request,
             llm_response=result.llm_response,
+            llm_raw_response=result.llm_raw_response,
         )
 
     def _apply_decision(
@@ -235,6 +241,7 @@ class SimulationEngine:
         *,
         llm_request: str | None = None,
         llm_response: str | None = None,
+        llm_raw_response: str | None = None,
     ) -> SimulationDecisionEvent:
         if decision.action not in {STAY, CHANGE_LANE}:
             decision = EthicalDecision(
@@ -272,6 +279,7 @@ class SimulationEngine:
             lane_change_started=lane_change_started,
             llm_request=llm_request,
             llm_response=llm_response,
+            llm_raw_response=llm_raw_response,
         )
 
     def close(self) -> None:
