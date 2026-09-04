@@ -57,10 +57,10 @@
 }
 
 \author{
-    Your Name\\
     University of Bologna\\
     Master in Artificial Intelligence\\
-    \texttt{your.email@studio.unibo.it}
+    Luca Anzaldi \\
+    \texttt{luca.anzaldi@studio.unibo.it}
 }
 
 \date{2026}
@@ -172,7 +172,7 @@ The only actions available to the ethical agent are:
 \end{itemize}
 
 The number of lane changes can be limited through the parameter
-\texttt{max\_spostamenti}.
+\texttt{max\_shift}.
 
 
 \subsection{Vehicle Perception}
@@ -302,9 +302,9 @@ Each category can be assigned a configurable malus:
 \toprule
 Category & Example Malus \\
 \midrule
-Child   & -30 \\
-Adult   & -20 \\
-Elderly & -10 \\
+Child   & 30 \\
+Adult   & 20 \\
+Elderly & 10 \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -599,6 +599,7 @@ that produced it.
 % =================================================
 \newpage
 \section{Experimental Evaluation}
+\label{sec:experimental-evaluation}
 
 \subsection{Experimental Setup}
 
@@ -608,9 +609,20 @@ For experiments comparing the \textbf{Code} and \textbf{LLM-Agent} implementatio
 
 The LLM-based experiments use Google's \texttt{gemini-3.5-flash-lite} model \cite{gemini35flashlite}. The model was selected because it is designed for low-latency and high-throughput workloads, making it suitable for repeated decision requests within the simulation.
 
-In contrast, experiments involving only deterministic \textbf{Code agents} are executed for up to \textbf{100,000 simulations}. Since these agents operate locally and do not require external API calls, they can be evaluated much more efficiently and on a substantially larger number of scenarios.
-
 When Code and LLM implementations are compared, the same scenarios, initial conditions, and random seeds are used for both agents.
+
+For the controlled \textbf{zero-casualty scenario}, two pedestrians are placed
+sequentially along the route: first a child and then an adult. The vehicle has
+\textbf{two lane changes available}, making it theoretically possible to avoid
+both collisions and complete the scenario without casualties. The scenario is
+shown in Figure~\ref{fig:zero-casualty-scenario}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\linewidth]{img/zero_casualty_scenario.png}
+    \caption{Controlled zero-casualty scenario used in the experiments}
+    \label{fig:zero-casualty-scenario}
+\end{figure}
 
 % ------------------------------------------------
 \subsection{Internal Consistency: Code vs LLM}
@@ -670,7 +682,7 @@ The following experiments are performed:
 
     A controlled scenario is created in which a sequence of valid
     decisions allows the vehicle to complete the simulation without any
-    casualties.
+    casualties. (Figure ~\ref{fig:zero-casualty-scenario})
 
     \textit{Research question:}
     Are both implementations able to identify and follow the
@@ -698,12 +710,24 @@ The following experiments are performed:
     \item \textbf{Scenario where everyone can be saved}
 
     A controlled scenario is used in which it is possible to avoid all
-    casualties without violating the available actions.
+    casualties without violating the available actions. (Figure ~\ref{fig:zero-casualty-scenario})
 
     \textit{Research question:}
     Do both Kantian implementations identify the non-harmful solution
     when no real moral trade-off is necessary?
 
+\end{enumerate}
+
+The Kantian experiments use the following moral rules, listed in their
+configured priority order:
+
+\begin{enumerate}
+    \item \texttt{IGNORE\_PERSONAL\_CATEGORIES}
+    \item \texttt{IGNORE\_NUMERICAL\_DIFFERENCES}
+    \item \texttt{PREFER\_STAY\_WHEN\_UNRESOLVED}
+    \item \texttt{DO\_NOT\_INCREASE\_HARM}
+    \item \texttt{DO\_NOT\_REDIRECT\_HARM}
+    \item \texttt{ALWAYS\_PROTECT\_CHILD}
 \end{enumerate}
 
 
@@ -726,7 +750,7 @@ The following experiments are performed:
     \item \textbf{Scenario where everyone can be saved}
 
     A controlled scenario is created in which all casualties can be
-    avoided.
+    avoided. (Figure ~\ref{fig:zero-casualty-scenario})
 
     \textit{Research question:}
     Do both implementations successfully identify the solution that
@@ -734,51 +758,30 @@ The following experiments are performed:
 
 \end{enumerate}
 
+The Constant experiments use the same set of moral rules introduced in
+Section~\ref{sec:result_kantian}. Unlike the Kantian framework, however, the
+rules are not evaluated according to a priority hierarchy, but are treated at
+the same level and conflicts are resolved through the configured
+conflict-resolution mechanism.
 
-% ------------------------------------------------
-\subsection{Framework Comparison}
+\subsubsection{Virtue Ethics}\label{sec:result_virtue}
 
-The second group of experiments compares different ethical theories
-directly.
+Virtue Ethics is available only in the LLM-based implementation and therefore
+cannot be directly compared with a deterministic counterpart.
 
-All frameworks are evaluated using the same scenarios and random seeds,
-so that the comparison focuses on differences generated by their ethical
-decision strategies.
+For this reason, its behaviour is evaluated against the deterministic
+Utilitarian agent, which is used as a baseline. Both agents are tested on the
+same scenarios and random seeds.
 
+The objective is to compare the decisions produced by open-ended
+virtue-based reasoning with those of a deterministic consequence-based
+strategy.
 
-\subsubsection{Kant vs Constant -- Deterministic Implementations}\label{sec:result_kantVSconstant}
+The Virtue Ethics agent was implemented using the following prompt: \begin{quote} \textit{ Apply Virtue Ethics through practical wisdom. Consider which available action best reflects virtues relevant to the supplied situation, such as compassion, responsibility, justice, courage, and restraint. Evaluate only visible entities and the available lane-change budget. Do not convert the choice into a purely numerical optimization unless the user's additional instructions explicitly request it. Briefly identify the decisive virtue or practical consideration in the reason. If the virtues do not clearly distinguish the actions, choose STAY. } \end{quote}
 
-The deterministic implementations of Kant and Constant are executed on
-the same set of scenarios.
-
-The main difference between the two approaches lies in \textbf{conflict
-resolution}: Kant uses a hierarchy of moral rules, while Constant allows
-rules to remain at the same level and uses an additional conflict
-resolution strategy when necessary.
-
-The main research question is:
-
-\begin{quote}
-\textit{Does the greater flexibility of Constant's conflict-resolution
-mechanism lead to fewer casualties than the hierarchical Kantian
-approach?}
-\end{quote}
-
-\subsubsection{Comparison Between All Frameworks}\label{sec:result_allframeworks}
-
-Utilitarianism, Kantian Ethics, Constant's approach and Virtue Ethics are
-executed on the same scenarios using identical random seeds.
-
-The objective is not to identify an objectively ``correct'' ethical
-theory, but to compare the practical consequences produced by each
-framework.
-
-The main research question is:
-
-\begin{quote}
-\textit{How do different ethical frameworks compare when evaluated
-according to common quantitative outcome metrics?}
-\end{quote}
+\textit{Research question:}
+How does the LLM-based Virtue Ethics agent differ from a deterministic
+Utilitarian baseline in terms of decisions and resulting casualties?
 
 % ------------------------------------------------
 \subsection{Evaluation Metrics}
@@ -855,6 +858,7 @@ These metrics allow the experiments to evaluate not only the final
 number of casualties, but also the consistency of the decision process,
 the behaviour of LLM agents, and the practical differences between the
 ethical frameworks.
+
 
 
 
@@ -953,10 +957,14 @@ overall harm rather than explicitly applying the configured Kantian rule
 hierarchy, therefore resembling Utilitarian reasoning.
 
 After expanding the framework prompt and explicitly describing the intended
-meaning and application of each Kantian rule, the LLM consistently reproduced
-the expected behaviour. This suggests that, for rule-based ethical frameworks,
-providing rule names and priorities alone may be insufficient: the operational
-semantics of the rules must also be explicitly encoded in the prompt.
+meaning and application of each Kantian rule, the LLM showed an improvement
+in reproducing the expected behaviour. However, this improvement remained
+limited. As shown by the subsequent experiments over a larger number of
+scenarios, the overall gains were relatively small and the LLM still failed
+to reproduce the deterministic rule hierarchy reliably. This suggests that,
+for rule-based ethical frameworks, explicitly encoding the operational
+semantics of the rules can improve alignment, but is not sufficient to ensure
+consistent behaviour.
 
 The complete prompts, responses, and execution logs for these experiments are
 reported in Appendix~\ref{app:kant-prompt-analysis}.
@@ -965,14 +973,36 @@ The following results refer to the experimental configurations described in
 Section~\ref{sec:result_kantian}.
 
 
+\paragraph{Zero-Casualty Scenario}
+
+The initial Kantian experiment revealed a major limitation of the smaller
+LLM. Across \textbf{100 paired simulations}, the deterministic agent produced
+\textbf{0 casualties}, while the LLM produced \textbf{98}, with only
+\textbf{2\% decision agreement}.
+
+Even after improving the prompt, the smaller model followed the intended rule
+hierarchy only in a small fraction of cases. This suggests that model
+capability is a critical factor in this type of rule-based ethical reasoning:
+a well-specified prompt alone is not always sufficient to guarantee faithful
+execution. In contrast, the deterministic implementation behaved exactly as
+intended, consistently applying the configured Kantian rules.
 
 \paragraph{Random Rule Configurations}
 
-\todo{todo}
+In random Kantian scenarios, the LLM showed a partial but still limited
+alignment with the deterministic implementation. Across \textbf{100 paired
+simulations}, decision agreement reached \textbf{63.3\%} and category
+agreement \textbf{75.8\%}.
 
-\paragraph{Zero-Casualty Scenario}
+The deterministic agent produced \textbf{144 casualties}, while the LLM
+produced \textbf{174} (+30), with the zero-casualty rate decreasing from
+39\% to 33\%. Although the overall STAY/CHANGE\_LANE distribution was
+identical for both agents, their decisions differed at specific decision
+points, leading to \textbf{38 different outcomes}.
 
-\todo{todo}
+These results show that the LLM can approximate the Kantian strategy in
+random scenarios, but it still does not reproduce the deterministic rule
+hierarchy reliably enough to obtain comparable outcomes.
 
 
 % ------------------------------------------------
@@ -983,46 +1013,97 @@ Section~\ref{sec:result_constant}.
 
 \paragraph{Random Rule Configurations}
 
-\todo{todo}
+The most relevant difference concerns conflict detection: the deterministic
+agent identifies on average \textbf{1.96 conflicts per simulation}, while the
+LLM identifies only \textbf{0.53}. This strongly suggests that the main
+limitation occurs \textbf{before the deterministic resolver is activated}.
+Although the fallback guarantees deterministic conflict resolution, it cannot
+compensate for conflicts that the LLM fails to recognize.
 
 \paragraph{Zero-Casualty Scenario}
 
-\todo{todo}
+Across \textbf{100 paired simulations}, the deterministic Constant agent
+completed every run with \textbf{0 casualties}, while the LLM produced
+\textbf{100 casualties}, corresponding to \textbf{1 casualty per simulation}
+and a \textbf{0\% zero-casualty rate}.
+
+Since the scenario contains two pedestrians, the LLM effectively saves
+\textbf{50\% of the people} in each run. Casualties are distributed between
+\textbf{children (0.58)} and \textbf{adults (0.42)}.
+
+The results are very similar to those obtained with the Kantian framework.
+Constant introduces a hybrid decision process, since rule conflicts are
+resolved through a deterministic Utilitarian fallback. However, the fallback
+is activated by the LLM itself, which must first recognize that a conflict is
+present. Therefore, when the model fails to correctly detect or interpret the
+conflict, the deterministic resolver is not reached and the final outcome
+changes little. The fallback guarantees deterministic conflict resolution
+once activated, but does not eliminate the limitations of the LLM-based rule
+reasoning that precedes it.
 
 
-% ------------------------------------------------
-\subsection{Framework Comparison}
+\subsubsection{Virtue ethics Approach}
 
-\subsubsection{Kant vs Constant -- Deterministic Implementations}
+The following results refer to the experimental configurations described in
+Section~\ref{sec:result_virtue}.
 
-The following results refer to the experimental configuration described in
-Section~\ref{sec:result_kantVSconstant}.
+Across the same \textbf{100 randomly generated scenarios}, the deterministic
+Utilitarian agent produced \textbf{127 casualties}, compared with
+\textbf{281} for the LLM-based Virtue Ethics agent. The zero-casualty rate
+decreased from \textbf{50\%} to only \textbf{4\%}.
 
-\todo{todo}
+The main behavioural difference is the action distribution. The Utilitarian
+agent selected \texttt{CHANGE\_LANE} in \textbf{70\%} of its decisions,
+whereas Virtue Ethics selected \texttt{STAY} in \textbf{99\%} of cases,
+performing only \textbf{0.02 lane changes per simulation} on average.
 
+This strong preference for remaining in the current lane results in higher
+casualties across all categories. Unlike the deterministic Utilitarian agent,
+which actively selects the lower-cost outcome, the open-ended Virtue Ethics
+reasoning therefore exhibits a pronounced tendency toward non-intervention.
 
-\subsubsection{Comparison Between All Frameworks}
-
-The following results refer to the experimental configuration described in
-Section~\ref{sec:result_allframeworks}.
-
-\todo{todo}
 
 
 % =================================================
+\newpage
 \section{Final Remarks}
 
-\todo{to finish}
-The project provides a controlled environment for investigating how
-different ethical principles influence autonomous decisions.
+The experiments highlight clear differences between deterministic and
+LLM-based implementations of ethical frameworks. Deterministic agents behave
+consistently according to their explicitly encoded rules, while LLM agents
+show different levels of alignment depending on the framework and on the
+complexity of the reasoning required.
 
-A particularly relevant aspect is the comparison between explicitly
-programmed ethical rules and LLM agents instructed to follow the same
-ethical framework.
+For \textbf{Utilitarianism}, the LLM generally approximates the deterministic
+implementation and performs particularly well when the optimal solution is
+unambiguous. In contrast, the \textbf{Kantian} experiments show that reproducing a
+hierarchical rule-based decision process is considerably more difficult for
+the LLM, especially when the operational meaning of the rules must be inferred
+from the prompt.
 
-This makes it possible to study not only which decisions are made, but
-also how consistently different computational approaches represent the
-same ethical theory.
+Similar limitations emerge with \textbf{Constant's} framework. Although its
+conflict-resolution mechanism introduces a hybrid architecture in which
+detected conflicts are resolved deterministically through a Utilitarian
+fallback, the activation of this mechanism still depends on the LLM correctly
+recognizing the conflict. The experiments show that many conflicts are not
+identified by the model, limiting the practical impact of the deterministic
+resolver.
+
+The comparison with \textbf{Virtue Ethics} further illustrates the difference between
+explicitly programmed and open-ended ethical reasoning. The LLM-based Virtue
+Ethics agent showed a strong tendency toward \texttt{STAY}, producing
+substantially more casualties than the deterministic Utilitarian baseline.
+This illustrates how open-ended LLM reasoning, together with the fallback
+criteria specified in the prompt, can produce behavioural patterns that differ
+substantially from deterministic optimization.
+
+Overall, the results suggest that LLMs can reproduce simple and clearly defined ethical strategies, but they are less reliable when decisions require strict rules, conflict resolution, or implicit instructions. Therefore, both prompt design and model capability are important for correctly representing an ethical framework.
+
+However, the main objective of the project was achieved: creating a controlled and extensible environment where different ethical frameworks can be implemented and compared under the same reproducible conditions. The platform allows deterministic approaches and LLM-based methods to be evaluated using the same scenarios and metrics.
+
+The system can also be extended in future work. New ethical frameworks, conflict-resolution methods, prompts, and language models can be added. This will make it possible to test whether future LLMs can perform ethical reasoning more consistently and how they compare with deterministic approaches.
+
+
 
 
 
@@ -1422,13 +1503,68 @@ The complete model response was:
 }
 \end{verbatim}
 
-\subsubsection{Random Rule Configurations}
+\subsubsection{Random Rule configurations}
 
-\todo{todo}
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+Metric & Code & LLM & $\Delta$ LLM--Code \\
+\midrule
+Simulations & 100 & 100 & -- \\
+Total casualties & 144 & 174 & +30 \\
+Average casualties & 1.44 & 1.74 & +0.30 \\
+Zero-casualty rate & 39.0\% & 33.0\% & -6.0 pp \\
+Average lane changes & 1.55 & 1.78 & +0.23 \\
+Average decisions & 2.54 & 2.93 & +0.39 \\
+STAY / CHANGE\_LANE & 39\% / 61\% & 39\% / 61\% & -- \\
+Average active rules & 6.00 & 6.00 & 0 \\
+Decision agreement & \multicolumn{2}{c}{63.3\%} & -- \\
+Category agreement & \multicolumn{2}{c}{75.8\%} & -- \\
+Different outcomes & \multicolumn{2}{c}{38} & -- \\
+Average LLM response time & -- & 935 ms & -- \\
+\bottomrule
+\end{tabular}
+\caption{Complete batch statistics for the Kantian random-scenario experiment.}
+\label{tab:app-kant-random}
+\end{table}
 
 \subsubsection{Zero-Casualty Scenario}
 
-\todo{todo}
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+Metric & Code & LLM & $\Delta$ LLM--Code \\
+\midrule
+Simulations & 100 & 100 & -- \\
+Total casualties & 0 & 98 & +98 \\
+Average casualties & 0.00 & 0.98 & +0.98 \\
+Zero-casualty rate & 100.0\% & 2.0\% & -98.0 pp \\
+Average lane changes & 2.00 & 0.04 & -1.96 \\
+Average decisions & 2.00 & 1.02 & -0.98 \\
+STAY / CHANGE\_LANE & 0\% / 100\% & 96\% / 4\% & -- \\
+Average active rules & 6.00 & 6.00 & 0 \\
+Decision agreement & \multicolumn{2}{c}{2.0\%} & -- \\
+Category agreement & \multicolumn{2}{c}{2.0\%} & -- \\
+Different outcomes & \multicolumn{2}{c}{98} & -- \\
+Average LLM response time & -- & 985 ms & -- \\
+\bottomrule
+\end{tabular}
+\caption{Complete batch statistics for the initial Kantian Code vs LLM
+experiment.}
+\label{tab:app-kant-initial}
+\end{table}
+
+
+
+
+
+
+
+
 
 
 % =================================================
@@ -1436,23 +1572,136 @@ The complete model response was:
 
 \subsubsection{Random Rule Configurations}
 
-\todo{todo}
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+Metric & Code & LLM & $\Delta$ LLM--Code \\
+\midrule
+Simulations & 100 & 100 & -- \\
+Total casualties & 101 & 242 & +141 \\
+Average casualties & 1.01 & 2.42 & +1.41 \\
+Zero-casualty rate & 50.0\% & 12.0\% & -38.0 pp \\
+Average lane changes & 1.72 & 0.44 & -1.28 \\
+Average decisions & 2.30 & 2.73 & +0.43 \\
+STAY / CHANGE\_LANE & 25\% / 75\% & 84\% / 16\% & -- \\
+Average moral conflicts & 1.96 & 0.53 & -1.43 \\
+Conflict resolver & Utilitarian evaluation & Utilitarian evaluation & -- \\
+Decision agreement & \multicolumn{2}{c}{24.1\%} & -- \\
+Category agreement & \multicolumn{2}{c}{35.8\%} & -- \\
+Different outcomes & \multicolumn{2}{c}{80} & -- \\
+Average LLM response time & -- & 1199 ms & -- \\
+\bottomrule
+\end{tabular}
+\caption{Complete batch statistics for the Constant random-rule experiment.}
+\label{tab:app-constant-random}
+\end{table}
+
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+Category & Code & LLM \\
+\midrule
+Children & 0.28 & 0.52 \\
+Adults   & 0.37 & 0.95 \\
+Elderly  & 0.36 & 0.95 \\
+\bottomrule
+\end{tabular}
+\caption{Average casualties by category in the Constant random-rule experiment.}
+\label{tab:app-constant-random-categories}
+\end{table}
+
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+Entity & Code & LLM \\
+\midrule
+Man       & 0.18 & 0.43 \\
+Woman     & 0.19 & 0.52 \\
+Old man   & 0.19 & 0.47 \\
+Old woman & 0.17 & 0.48 \\
+Boy       & 0.11 & 0.24 \\
+Girl      & 0.17 & 0.28 \\
+\bottomrule
+\end{tabular}
+\caption{Average casualties by entity in the Constant random-rule experiment.}
+\label{tab:app-constant-random-entities}
+\end{table}
 
 \subsubsection{Zero-Casualty Scenario}
 
-\todo{todo}
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+Metric & Code & LLM & $\Delta$ LLM--Code \\
+\midrule
+Simulations & 100 & 100 & -- \\
+Total casualties & 0 & 100 & +100 \\
+Average casualties & 0.00 & 1.00 & +1.00 \\
+Zero-casualty rate & 100.0\% & 0.0\% & -100.0 pp \\
+Average lane changes & 2.00 & 0.42 & -1.58 \\
+Average decisions & 2.00 & 1.42 & -0.58 \\
+STAY / CHANGE\_LANE & 0\% / 100\% & 70\% / 30\% & -- \\
+Average moral conflicts & 2.00 & 0.38 & -1.62 \\
+Conflict resolver & Utilitarian evaluation & Utilitarian evaluation & -- \\
+Decision agreement & \multicolumn{2}{c}{21.0\%} & -- \\
+Category agreement & \multicolumn{2}{c}{0.0\%} & -- \\
+Different outcomes & \multicolumn{2}{c}{100} & -- \\
+Average LLM response time & -- & 1165 ms & -- \\
+\bottomrule
+\end{tabular}
+\caption{Complete batch statistics for the Constant zero-casualty scenario.}
+\label{tab:app-constant-zero-casualty}
+\end{table}
 
 
-% =================================================
-\subsection{Framework Comparison}
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+Category & Code & LLM \\
+\midrule
+Children & 0.00 & 0.58 \\
+Adults   & 0.00 & 0.42 \\
+Elderly  & 0.00 & 0.00 \\
+\bottomrule
+\end{tabular}
+\caption{Average casualties by category in the Constant zero-casualty
+experiment.}
+\label{tab:app-constant-zero-casualty-categories}
+\end{table}
 
-\subsubsection{Kant vs Constant -- Deterministic Implementations}
 
-\todo{todo}
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+Entity & Code & LLM \\
+\midrule
+Man       & 0.00 & 0.42 \\
+Woman     & 0.00 & 0.00 \\
+Old man   & 0.00 & 0.00 \\
+Old woman & 0.00 & 0.00 \\
+Boy       & 0.00 & 0.58 \\
+Girl      & 0.00 & 0.00 \\
+\bottomrule
+\end{tabular}
+\caption{Average casualties by entity in the Constant zero-casualty
+experiment.}
+\label{tab:app-constant-zero-casualty-entities}
+\end{table}
 
 
-\subsubsection{Comparison Between All Frameworks}
-
-\todo{todo}
 
 \end{document}
